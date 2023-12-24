@@ -1,0 +1,33 @@
+{
+  "name": "@nomyx/assistant-cli",
+  "version": "1.0.0",
+  "description": "A javascript-based CLI wrapper around the ai-assistant",
+  "main": "dist/index.js",
+  "publisher": "Nomyx",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nomyx-io/ai-assistant-cli.git"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [
+    "AI",
+    "interpretation",
+    "TypeScript"
+  ],
+  "author": "Your Name <Your Email>",
+  "license": "ISC",
+  "dependencies": {
+    "cli-highlight": "^2.1.11",
+    "@nomyx/assistant": "^1.0.0",
+    "@nomyx/assistant-tools": "^1.0.0",
+    "ora": "^5.4.1"
+  },
+  "bin": {
+    "ai": "./bin/ai"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
