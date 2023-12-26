@@ -59,7 +59,7 @@ var getAssistant = function (threadId) { return __awaiter(void 0, void 0, void 0
                 if (asst) {
                     return [2 /*return*/, asst];
                 }
-                return [4 /*yield*/, Assistant.list()];
+                return [4 /*yield*/, Assistant.list(config.openai_api_key)];
             case 1:
                 assistants = _f.sent();
                 assistant = asst = assistants.find(function (a) { return a.name === config.assistant_name; });

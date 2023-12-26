@@ -20,7 +20,7 @@ let request = process.argv.slice(2).join(' '); // request is used to keep track 
 // get the assistant object from openai or create a new one
 const getAssistant = async (threadId: any) => {
   if (asst) { return asst; }
-  const assistants = await Assistant.list();
+  const assistants = await Assistant.list(config.openai_api_key);
   const assistant = asst = assistants.find((a: any) => a.name === config.assistant_name);
   if (!assistant) {
     asst = await Assistant.create(
