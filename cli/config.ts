@@ -20,6 +20,12 @@ if (!fs.existsSync(configPath)) {
 
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
+const baseTools: any = require('@nomyx/assistant-tools')(config);
+
 export default config;
 
-module.exports = config;
+module.exports = {
+  config,
+  tools: baseTools.funcs,
+  schemas: baseTools.schemas,
+}

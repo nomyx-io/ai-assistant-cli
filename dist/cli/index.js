@@ -39,9 +39,8 @@ var cat = require('shelljs').cat;
 var fs = require('fs');
 var path = require('path');
 var Spinner = require('./spinner').Spinner;
-var config = require('./config');
 var _a = require("@nomyx/assistant"), Assistant = _a.Assistant, Thread = _a.Thread, loadNewPersona = _a.loadNewPersona;
-var _b = require("@nomyx/assistant-tools")(config), schemas = _b.schemas, funcs = _b.funcs, tools = _b.tools;
+var config = require('./config');
 var highlight = require('cli-highlight').highlight;
 var configPath = path.join(__dirname, '../..', 'config.json');
 var cliPrompt = require('./cli');
@@ -59,16 +58,16 @@ var getAssistant = function (threadId) { return __awaiter(void 0, void 0, void 0
                 if (asst) {
                     return [2 /*return*/, asst];
                 }
-                return [4 /*yield*/, Assistant.list(config.openai_api_key)];
+                return [4 /*yield*/, Assistant.list(config.config.openai_api_key)];
             case 1:
                 assistants = _f.sent();
-                assistant = asst = assistants.find(function (a) { return a.name === config.assistant_name; });
+                assistant = asst = assistants.find(function (a) { return a.name === config.config.assistant_name; });
                 if (!!assistant) return [3 /*break*/, 4];
                 _b = (_a = Assistant).create;
-                _c = [config.assistant_name];
-                return [4 /*yield*/, loadNewPersona(tools)];
-            case 2: return [4 /*yield*/, _b.apply(_a, _c.concat([_f.sent(), schemas,
-                    config.model,
+                _c = [config.config.assistant_name];
+                return [4 /*yield*/, loadNewPersona(config.config.tools)];
+            case 2: return [4 /*yield*/, _b.apply(_a, _c.concat([_f.sent(), config.schemas,
+                    config.config.model,
                     threadId]))];
             case 3:
                 asst = _f.sent();
@@ -90,7 +89,7 @@ var getAssistant = function (threadId) { return __awaiter(void 0, void 0, void 0
 var assistant;
 function main() {
     return __awaiter(this, void 0, void 0, function () {
-        var assistant, processUserCommand, cp;
+        var processUserCommand, cp;
         var _this = this;
         return __generator(this, function (_a) {
             switch (_a.label) {
@@ -101,30 +100,34 @@ function main() {
                         var result, err_1, result_1, retryAfter, retryAfterMs_1, highlighted;
                         return __generator(this, function (_a) {
                             switch (_a.label) {
-                                case 0:
-                                    _a.trys.push([0, 2, , 6]);
-                                    return [4 /*yield*/, assistant.run(request, funcs, schemas, config.openai_api_key, function (event, value) {
+                                case 0: return [4 /*yield*/, getAssistant(threadId)];
+                                case 1:
+                                    assistant = _a.sent();
+                                    _a.label = 2;
+                                case 2:
+                                    _a.trys.push([2, 4, , 8]);
+                                    return [4 /*yield*/, assistant.run(request, config.tools, config.schemas, config.config.openai_api_key, function (event, value) {
                                             updateSpinner && updateSpinner(event);
                                         })];
-                                case 1:
+                                case 3:
                                     result = _a.sent();
-                                    return [3 /*break*/, 6];
-                                case 2:
+                                    return [3 /*break*/, 8];
+                                case 4:
                                     err_1 = _a.sent();
-                                    if (!(err_1.response && err_1.response.status === 429)) return [3 /*break*/, 5];
+                                    if (!(err_1.response && err_1.response.status === 429)) return [3 /*break*/, 7];
                                     console.log('Too many requests, pausing for 30 seconds');
                                     result_1 = err_1.message;
                                     retryAfter = err_1.response.headers['retry-after'];
-                                    if (!retryAfter) return [3 /*break*/, 4];
+                                    if (!retryAfter) return [3 /*break*/, 6];
                                     retryAfterMs_1 = parseInt(retryAfter) * 1000;
                                     result_1 += "... retrying in ".concat(retryAfter, " seconds");
                                     return [4 /*yield*/, new Promise(function (resolve) { return setTimeout(resolve, retryAfterMs_1); })];
-                                case 3:
+                                case 5:
                                     _a.sent();
-                                    _a.label = 4;
-                                case 4: return [2 /*return*/, "Error: ".concat(result_1)];
-                                case 5: return [3 /*break*/, 6];
-                                case 6:
+                                    _a.label = 6;
+                                case 6: return [2 /*return*/, "Error: ".concat(result_1)];
+                                case 7: return [3 /*break*/, 8];
+                                case 8:
                                     try {
                                         highlighted = highlight(result, { language: 'javascript', ignoreIllegals: true });
                                         console.log('\n' + highlighted + '\n');
@@ -141,10 +144,10 @@ function main() {
                     }); };
                     return [4 /*yield*/, cliPrompt(assistant, function (command) {
                             // if there is no api key, then the user is entering it
-                            var hasApiKey = config.openai_api_key && config.openai_api_key.length > 0;
+                            var hasApiKey = config.config.openai_api_key && config.config.openai_api_key.length > 0;
                             if (!hasApiKey) {
-                                config.openai_api_key = request;
-                                fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+                                config.config.openai_api_key = request;
+                                fs.writeFileSync(configPath, JSON.stringify(config.config, null, 2));
                                 return false;
                             }
                             var spinner = new Spinner({
@@ -190,7 +193,7 @@ function main() {
                                 });
                             });
                         }, function () {
-                            var hasApiKey = config.openai_api_key && config.openai_api_key.length > 0;
+                            var hasApiKey = config.config.openai_api_key && config.config.openai_api_key.length > 0;
                             return hasApiKey ? '> ' : 'Enter your OpenAI API key: ';
                         })];
                 case 2:

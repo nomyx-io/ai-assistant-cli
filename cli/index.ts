@@ -3,9 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const { Spinner } = require('./spinner');  
 
-const config = require('./config');
 const { Assistant, Thread, loadNewPersona } = require("@nomyx/assistant");
-const { schemas, funcs, tools } = require("@nomyx/assistant-tools")(config);
+const config = require('./config');
 
 const highlight = require('cli-highlight').highlight;
 const configPath = path.join(__dirname, '../..', 'config.json');
@@ -20,14 +19,14 @@ let request = process.argv.slice(2).join(' '); // request is used to keep track 
 // get the assistant object from openai or create a new one
 const getAssistant = async (threadId: any) => {
   if (asst) { return asst; }
-  const assistants = await Assistant.list(config.openai_api_key);
-  const assistant = asst = assistants.find((a: any) => a.name === config.assistant_name);
+  const assistants = await Assistant.list(config.config.openai_api_key);
+  const assistant = asst = assistants.find((a: any) => a.name === config.config.assistant_name);
   if (!assistant) {
     asst = await Assistant.create(
-      config.assistant_name,
-      await loadNewPersona(tools),
-      schemas,
-      config.model,
+      config.config.assistant_name,
+      await loadNewPersona(config.config.tools),
+      config.schemas,
+      config.config.model,
       threadId
     );
     return asst;
@@ -38,11 +37,13 @@ const getAssistant = async (threadId: any) => {
 
 let assistant;
 async function main() {
-  let assistant = await getAssistant(threadId);
+  assistant = await getAssistant(threadId);
+  
   const processUserCommand = async (request: string, threadId: any, updateSpinner: (msg: string)=> void): Promise<any> => {
+    assistant = await getAssistant(threadId);
     let result;
     try {
-      result = await assistant.run(request, funcs, schemas, config.openai_api_key, (event: string, value: any) => {
+      result = await assistant.run(request, config.tools, config.schemas, config.config.openai_api_key, (event: string, value: any) => {
         updateSpinner && updateSpinner(event);
       });
     } catch (err: any) {
@@ -72,10 +73,10 @@ async function main() {
   
   const cp = await cliPrompt(assistant, (command: string) => {
     // if there is no api key, then the user is entering it
-    const hasApiKey = config.openai_api_key && config.openai_api_key.length > 0;
+    const hasApiKey = config.config.openai_api_key && config.config.openai_api_key.length > 0;
     if (!hasApiKey) {
-      config.openai_api_key = request;
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      config.config.openai_api_key = request;
+      fs.writeFileSync(configPath, JSON.stringify(config.config, null, 2));
       return false;
     }                                                                                                                                                                                                       
     const spinner = new Spinner({
@@ -121,7 +122,7 @@ async function main() {
        });
     })
   }, () => {
-    const hasApiKey = config.openai_api_key && config.openai_api_key.length > 0;
+    const hasApiKey = config.config.openai_api_key && config.config.openai_api_key.length > 0;
     return hasApiKey ? '> ' : 'Enter your OpenAI API key: '
   });
   cp.assistant = assistant;

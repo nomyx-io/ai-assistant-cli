@@ -21,5 +21,10 @@ if (!fs_1.default.existsSync(configPath)) {
     fs_1.default.writeFileSync(configPath, JSON.stringify(config_1, null, 2));
 }
 var config = JSON.parse(fs_1.default.readFileSync(configPath, 'utf8'));
+var baseTools = require('@nomyx/assistant-tools')(config);
 exports.default = config;
-module.exports = config;
+module.exports = {
+    config: config,
+    tools: baseTools.funcs,
+    schemas: baseTools.schemas,
+};
