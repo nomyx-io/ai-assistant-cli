@@ -24,7 +24,7 @@ const getAssistant = async (threadId: any) => {
   if (!assistant) {
     asst = await Assistant.create(
       config.config.assistant_name,
-      await loadNewPersona(config.tools),
+      await loadNewPersona(config.schemas),
       config.schemas,
       config.config.model,
       threadId
@@ -171,7 +171,9 @@ async function main() {
   }, () => {
     return new Promise((resolve) => {
       getAssistant(threadId).then((assistant: any) => {
-        assistant.cancel();
+        if(assistant.run.data.status === 'running') {
+          assistant.cancel();
+        }
         resolve(false);
        });
     })
