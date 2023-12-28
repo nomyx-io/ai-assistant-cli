@@ -24,7 +24,7 @@ const getAssistant = async (threadId: any) => {
   if (!assistant) {
     asst = await Assistant.create(
       config.config.assistant_name,
-      await loadNewPersona(config.config.tools),
+      await loadNewPersona(config.tools),
       config.schemas,
       config.config.model,
       threadId
