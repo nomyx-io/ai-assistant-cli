@@ -23,7 +23,13 @@ This project is a command-line interface (CLI) application built with the Nomyx 
 The project requires Node.js and npm to run. Install the dependencies by running:
 
 ```bash
-npm install nomyx-ai-assistant nomyx-ai-assistant-tools
+npm install -g @nomyx/assistant-cli
+```
+
+Then, run the following command to install the CLI app:
+
+```bash
+assistant
 ```
 
 ## Usage
