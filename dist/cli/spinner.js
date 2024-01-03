@@ -10,16 +10,25 @@ var Spinner = /** @class */ (function () {
     function Spinner(config) {
         this.currentIndex = 0;
         this.timer = null;
+        this._isSpinning = false;
         this.title = config.title;
         this.interval = config.interval;
         this.frames = config.frames;
     }
+    Object.defineProperty(Spinner.prototype, "isSpinning", {
+        get: function () {
+            return this._isSpinning;
+        },
+        enumerable: false,
+        configurable: true
+    });
     Spinner.prototype.setTitle = function (newTitle) {
         this.title = newTitle;
     };
     Spinner.prototype.start = function () {
         var _this = this;
         this.stop();
+        this._isSpinning = true;
         this.timer = setInterval(function () {
             var frame = _this.frames[_this.currentIndex];
             _this.renderFrame(frame);
@@ -28,6 +37,7 @@ var Spinner = /** @class */ (function () {
     };
     Spinner.prototype.stop = function () {
         if (this.timer) {
+            this._isSpinning = false;
             clearInterval(this.timer);
             this.timer = null;
             readline_1.default.clearLine(process_1.default.stdout, 0); // Clear the line

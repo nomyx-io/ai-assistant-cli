@@ -14,6 +14,11 @@ export class Spinner {
     private frames: string[];
     private currentIndex: number = 0;
     private timer: NodeJS.Timeout | null = null;
+    private _isSpinning: boolean = false;
+
+    get isSpinning(): boolean {
+        return this._isSpinning;
+    }
 
     constructor(config: SpinnerConfig) {
         this.title = config.title;
@@ -27,6 +32,7 @@ export class Spinner {
 
     public start(): void {
         this.stop();
+        this._isSpinning = true;
         this.timer = setInterval(() => {
             const frame = this.frames[this.currentIndex];
             this.renderFrame(frame);
@@ -36,6 +42,7 @@ export class Spinner {
 
     public stop(): void {
         if (this.timer) {
+            this._isSpinning = false;
             clearInterval(this.timer);
             this.timer = null;
             readline.clearLine(process.stdout, 0); // Clear the line

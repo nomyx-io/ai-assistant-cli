@@ -1,7 +1,7 @@
 const { cat } = require('shelljs');
 const fs = require('fs');
 const path = require('path');
-const { Spinner } = require('./spinner');  
+
 
 const { Assistant, Thread, loadNewPersona } = require("@nomyx/assistant");
 const config = require('./config');
@@ -36,17 +36,21 @@ const getAssistant = async (threadId: any) => {
 }
 
 let assistant;
+let cli: any;
 async function main() {
   assistant = await getAssistant(threadId);
   
-  const processUserCommand = async (request: string, threadId: any, updateSpinner: (msg: string)=> void): Promise<any> => {
+  const processUserCommand = async (request: string, threadId: any): Promise<any> => {
+    // get the assistant object from openai or create a new one
     assistant = await getAssistant(threadId);
+    // run the assistant with the user's request
     let result;
     try {
       result = await assistant.run(request, config.tools, config.schemas, config.config.openai_api_key, (event: string, value: any) => {
-        updateSpinner && updateSpinner(event);
+        cli && cli.updateSpinner(event);
       });
     } catch (err: any) {
+      // a common error is too many requests, so we'll retry after the retry-after header
       if (err.response && err.response.status === 429) {
         console.log('Too many requests, pausing for 30 seconds');
         let result = err.message
@@ -71,103 +75,22 @@ async function main() {
     }
   }
   
-  const cp = await cliPrompt(assistant, (command: string) => {
-    // if there is no api key, then the user is entering it
-    const hasApiKey = config.config.openai_api_key && config.config.openai_api_key.length > 0;
-    if (!hasApiKey) {
-      config.config.openai_api_key = request;
-      fs.writeFileSync(configPath, JSON.stringify(config.config, null, 2));
-      return false;
-    }                                                                                                                                                                                                       
-    const spinner = new Spinner({
-      title: "loading",
-      interval: 120,
-      frames: [
-        "䷀",
-        "䷁",
-        "䷂",
-        "䷃",
-        "䷄",
-        "䷅",
-        "䷆",
-        "䷇",
-        "䷈",
-        "䷉",
-        "䷊",
-        "䷋",
-        "䷌",
-        "䷍",
-        "䷎",
-        "䷏",
-        "䷐",
-        "䷑",
-        "䷒",
-        "䷓",
-        "䷔",
-        "䷕",
-        "䷖",
-        "䷗",
-        "䷘",
-        "䷙",
-        "䷚",
-        "䷛",
-        "䷜",
-        "䷝",
-        "䷞",
-        "䷟",
-        "䷠",
-        "䷡",
-        "䷢",
-        "䷣",
-        "䷤",
-        "䷥",
-        "䷦",
-        "䷧",
-        "䷨",
-        "䷩",
-        "䷪",
-        "䷫",
-        "䷬",
-        "䷭",
-        "䷮",
-        "䷯",
-        "䷰",
-        "䷱",
-        "䷲",
-        "䷳",
-        "䷴",
-        "䷵",
-        "䷶",
-        "䷷",
-        "䷸",
-        "䷹",
-        "䷺",
-        "䷻",
-        "䷼",
-        "䷽",
-        "䷾",
-        "䷿"
-      ]
-    });
-    let spinnerText = '';
-    const updateSpinner = (msg: string) => {
-      const spl: any = msg.split(' ');
-      // if the last element is a number, then it's a progress update
-      if (spl.length > 1 && !isNaN(spl[spl.length - 1])) {
-        msg = spl.slice(0, spl.length - 1).join(' ');
-        spinner.setTitle(spl.join(' '));
-      }
-      if (spinnerText !== msg) {
-        spinnerText = msg;
-        spinner.success(msg);
-        spinner.start();
-      }                                                                                                                                                                                                                                                                                                                                                                                               
-    }                                                                                                                                                                                                                                                           
-    spinner.start();                                                                                                                                                                                                                                                 
-    processUserCommand(command, threadId, updateSpinner).then((messageResults: any) => {                                                                                                                                                                        
-      threadId = messageResults['threadId'];   
-      spinner.stop();                                                                                                                                                                                                                                                                                                                                                                                                                                              
-    }); 
+  cli = await cliPrompt(assistant, async (command: string) => {
+    return new Promise((resolve) => {
+      // if there is no api key, then the user is entering it
+      const hasApiKey = config.config.openai_api_key && config.config.openai_api_key.length > 0;
+      if (!hasApiKey) {
+        config.config.openai_api_key = request;
+        fs.writeFileSync(configPath, JSON.stringify(config.config, null, 2));
+        resolve(false);
+        return
+      }                                                                                                                                                                                                       
+      // process the user's command                                                                                                                                                                                                                                      
+      processUserCommand(command, threadId).then((messageResults: any) => {                                                                                                                                                                        
+        threadId = messageResults['threadId'];
+        resolve(false);                                                                                                                                                                                                                                                                                                                                                                                                                                            
+      }); 
+    })
   }, () => {
     return new Promise((resolve) => {
       getAssistant(threadId).then((assistant: any) => {
@@ -181,7 +104,7 @@ async function main() {
     const hasApiKey = config.config.openai_api_key && config.config.openai_api_key.length > 0;
     return hasApiKey ? '> ' : 'Enter your OpenAI API key: '
   });
-  cp.assistant = assistant;
-  cp.start();
+  cli.assistant = assistant;
+  cli.start();
 }
 main();

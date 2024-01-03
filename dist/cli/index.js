@@ -38,7 +38,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 var cat = require('shelljs').cat;
 var fs = require('fs');
 var path = require('path');
-var Spinner = require('./spinner').Spinner;
 var _a = require("@nomyx/assistant"), Assistant = _a.Assistant, Thread = _a.Thread, loadNewPersona = _a.loadNewPersona;
 var config = require('./config');
 var highlight = require('cli-highlight').highlight;
@@ -87,27 +86,29 @@ var getAssistant = function (threadId) { return __awaiter(void 0, void 0, void 0
     });
 }); };
 var assistant;
+var cli;
 function main() {
     return __awaiter(this, void 0, void 0, function () {
-        var processUserCommand, cp;
+        var processUserCommand;
         var _this = this;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0: return [4 /*yield*/, getAssistant(threadId)];
                 case 1:
                     assistant = _a.sent();
-                    processUserCommand = function (request, threadId, updateSpinner) { return __awaiter(_this, void 0, void 0, function () {
+                    processUserCommand = function (request, threadId) { return __awaiter(_this, void 0, void 0, function () {
                         var result, err_1, result_1, retryAfter, retryAfterMs_1, highlighted;
                         return __generator(this, function (_a) {
                             switch (_a.label) {
                                 case 0: return [4 /*yield*/, getAssistant(threadId)];
                                 case 1:
+                                    // get the assistant object from openai or create a new one
                                     assistant = _a.sent();
                                     _a.label = 2;
                                 case 2:
                                     _a.trys.push([2, 4, , 8]);
                                     return [4 /*yield*/, assistant.run(request, config.tools, config.schemas, config.config.openai_api_key, function (event, value) {
-                                            updateSpinner && updateSpinner(event);
+                                            cli && cli.updateSpinner(event);
                                         })];
                                 case 3:
                                     result = _a.sent();
@@ -142,104 +143,25 @@ function main() {
                             }
                         });
                     }); };
-                    return [4 /*yield*/, cliPrompt(assistant, function (command) {
-                            // if there is no api key, then the user is entering it
-                            var hasApiKey = config.config.openai_api_key && config.config.openai_api_key.length > 0;
-                            if (!hasApiKey) {
-                                config.config.openai_api_key = request;
-                                fs.writeFileSync(configPath, JSON.stringify(config.config, null, 2));
-                                return false;
-                            }
-                            var spinner = new Spinner({
-                                title: "loading",
-                                interval: 120,
-                                frames: [
-                                    "䷀",
-                                    "䷁",
-                                    "䷂",
-                                    "䷃",
-                                    "䷄",
-                                    "䷅",
-                                    "䷆",
-                                    "䷇",
-                                    "䷈",
-                                    "䷉",
-                                    "䷊",
-                                    "䷋",
-                                    "䷌",
-                                    "䷍",
-                                    "䷎",
-                                    "䷏",
-                                    "䷐",
-                                    "䷑",
-                                    "䷒",
-                                    "䷓",
-                                    "䷔",
-                                    "䷕",
-                                    "䷖",
-                                    "䷗",
-                                    "䷘",
-                                    "䷙",
-                                    "䷚",
-                                    "䷛",
-                                    "䷜",
-                                    "䷝",
-                                    "䷞",
-                                    "䷟",
-                                    "䷠",
-                                    "䷡",
-                                    "䷢",
-                                    "䷣",
-                                    "䷤",
-                                    "䷥",
-                                    "䷦",
-                                    "䷧",
-                                    "䷨",
-                                    "䷩",
-                                    "䷪",
-                                    "䷫",
-                                    "䷬",
-                                    "䷭",
-                                    "䷮",
-                                    "䷯",
-                                    "䷰",
-                                    "䷱",
-                                    "䷲",
-                                    "䷳",
-                                    "䷴",
-                                    "䷵",
-                                    "䷶",
-                                    "䷷",
-                                    "䷸",
-                                    "䷹",
-                                    "䷺",
-                                    "䷻",
-                                    "䷼",
-                                    "䷽",
-                                    "䷾",
-                                    "䷿"
-                                ]
+                    return [4 /*yield*/, cliPrompt(assistant, function (command) { return __awaiter(_this, void 0, void 0, function () {
+                            return __generator(this, function (_a) {
+                                return [2 /*return*/, new Promise(function (resolve) {
+                                        // if there is no api key, then the user is entering it
+                                        var hasApiKey = config.config.openai_api_key && config.config.openai_api_key.length > 0;
+                                        if (!hasApiKey) {
+                                            config.config.openai_api_key = request;
+                                            fs.writeFileSync(configPath, JSON.stringify(config.config, null, 2));
+                                            resolve(false);
+                                            return;
+                                        }
+                                        // process the user's command                                                                                                                                                                                                                                      
+                                        processUserCommand(command, threadId).then(function (messageResults) {
+                                            threadId = messageResults['threadId'];
+                                            resolve(false);
+                                        });
+                                    })];
                             });
-                            var spinnerText = '';
-                            var updateSpinner = function (msg) {
-                                var spl = msg.split(' ');
-                                // if the last element is a number, then it's a progress update
-                                if (spl.length > 1 && !isNaN(spl[spl.length - 1])) {
-                                    msg = spl.slice(0, spl.length - 1).join(' ');
-                                    spinner.setTitle(spl.join(' '));
-                                }
-                                if (spinnerText !== msg) {
-                                    spinnerText = msg;
-                                    spinner.success(msg);
-                                    spinner.start();
-                                }
-                            };
-                            spinner.start();
-                            processUserCommand(command, threadId, updateSpinner).then(function (messageResults) {
-                                threadId = messageResults['threadId'];
-                                spinner.stop();
-                            });
-                        }, function () {
+                        }); }, function () {
                             return new Promise(function (resolve) {
                                 getAssistant(threadId).then(function (assistant) {
                                     if (assistant.run.data.status === 'running') {
@@ -253,9 +175,9 @@ function main() {
                             return hasApiKey ? '> ' : 'Enter your OpenAI API key: ';
                         })];
                 case 2:
-                    cp = _a.sent();
-                    cp.assistant = assistant;
-                    cp.start();
+                    cli = _a.sent();
+                    cli.assistant = assistant;
+                    cli.start();
                     return [2 /*return*/];
             }
         });
