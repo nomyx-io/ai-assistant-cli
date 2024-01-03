@@ -1,0 +1,7 @@
+// Sample Code
+function testFunction() {
+  var x = 100;
+  var y = 20;
+  console.error(x + y);
+}
+testFunction();
