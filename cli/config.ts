@@ -4,9 +4,11 @@ import path from 'path';
 
 const configPath = path.join(__dirname, '../..', 'config.json');
 
+let config: any = {};
 if (!fs.existsSync(configPath)) {
-  const config = {
-    'openai_api_key': process.env.OPENAI_API_KEY || '',
+  const apiKey = process.env.OPENAI_API_KEY || '';
+  config = {
+    'openai_api_key': apiKey,
     'model': 'gpt-4-1106-preview',
     "playHT": {
         "apiKey": process.env.PLAYHT_API_KEY || "",
@@ -15,10 +17,10 @@ if (!fs.existsSync(configPath)) {
         "femaleVoice": process.env.PLAYHT_FEMALE_VOICE || "",
     }
   }
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  apiKey && fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+} else {
+  config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 }
-
-const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
 const baseTools: any = require('@nomyx/assistant-tools')(config);
 
