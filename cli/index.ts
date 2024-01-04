@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 
-const { Assistant, Thread, loadNewPersona } = require("@nomyx/assistant");
+const { Assistant, Thread, loadNewPersona, getPersonaPrompt } = require("@nomyx/assistant");
 const config = require('./config');
 
 const highlight = require('cli-highlight').highlight;
@@ -46,7 +46,7 @@ async function main() {
     // run the assistant with the user's request
     let result;
     try {
-      result = await assistant.run(request, config.tools, config.schemas, config.config.openai_api_key, (event: string, value: any) => {
+      result = await assistant.run(getPersonaPrompt(request), config.tools, config.schemas, config.config.openai_api_key, (event: string, value: any) => {
         cli && cli.updateSpinner(event);
       });
     } catch (err: any) {

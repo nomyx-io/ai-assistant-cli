@@ -38,7 +38,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 var cat = require('shelljs').cat;
 var fs = require('fs');
 var path = require('path');
-var _a = require("@nomyx/assistant"), Assistant = _a.Assistant, Thread = _a.Thread, loadNewPersona = _a.loadNewPersona;
+var _a = require("@nomyx/assistant"), Assistant = _a.Assistant, Thread = _a.Thread, loadNewPersona = _a.loadNewPersona, getPersonaPrompt = _a.getPersonaPrompt;
 var config = require('./config');
 var highlight = require('cli-highlight').highlight;
 var configPath = path.join(__dirname, '../..', 'config.json');
@@ -107,7 +107,7 @@ function main() {
                                     _a.label = 2;
                                 case 2:
                                     _a.trys.push([2, 4, , 8]);
-                                    return [4 /*yield*/, assistant.run(request, config.tools, config.schemas, config.config.openai_api_key, function (event, value) {
+                                    return [4 /*yield*/, assistant.run(getPersonaPrompt(request), config.tools, config.schemas, config.config.openai_api_key, function (event, value) {
                                             cli && cli.updateSpinner(event);
                                         })];
                                 case 3:
