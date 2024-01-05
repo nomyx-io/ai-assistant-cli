@@ -38,7 +38,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 var cat = require('shelljs').cat;
 var fs = require('fs');
 var path = require('path');
-var _a = require("@nomyx/assistant"), Assistant = _a.Assistant, Thread = _a.Thread, loadNewPersona = _a.loadNewPersona, getPersonaPrompt = _a.getPersonaPrompt;
+var _a = require("@nomyx/assistant"), Assistant = _a.Assistant, Thread = _a.Thread, loadNewPersona = _a.loadNewPersona;
 var config = require('./config');
 var highlight = require('cli-highlight').highlight;
 var configPath = path.join(__dirname, '../..', 'config.json');
@@ -48,6 +48,9 @@ var threadId = undefined; // threadId is used to keep track of the threadId of t
 var asst = undefined; // asst is used to keep track of the assistant
 var runningMode = false; // runningMode is used to keep track of whether the assistant is running or not
 var request = process.argv.slice(2).join(' '); // request is used to keep track of the user's request
+function getPersonaPrompt(p) {
+    return "First, load your list of learned skills and tools in preparation for the interaction. Then carefully read through the given task: \n\n".concat(p, "\n\nNow, determine the complexity of the task and decide whether to use an existing skill or create a new one. \nIf you decide to use an existing skill, notify the user and execute the task. \nIf you decide to create a new skill, notify the user and execute the task. \nIf the performance is unsatisfactory, improve the skill with the outcome and update the learned skills repository.");
+}
 // get the assistant object from openai or create a new one
 var getAssistant = function (threadId) { return __awaiter(void 0, void 0, void 0, function () {
     var assistants, assistant, _a, _b, _c, _d, _e;

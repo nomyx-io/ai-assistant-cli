@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 
-const { Assistant, Thread, loadNewPersona, getPersonaPrompt } = require("@nomyx/assistant");
+const { Assistant, Thread, loadNewPersona } = require("@nomyx/assistant");
 const config = require('./config');
 
 const highlight = require('cli-highlight').highlight;
@@ -15,6 +15,10 @@ let threadId: any = undefined; // threadId is used to keep track of the threadId
 let asst: any = undefined; // asst is used to keep track of the assistant
 let runningMode = false; // runningMode is used to keep track of whether the assistant is running or not
 let request = process.argv.slice(2).join(' '); // request is used to keep track of the user's request
+
+function getPersonaPrompt(p: any) {
+  return "First, load your list of learned skills and tools in preparation for the interaction. Then carefully read through the given task: \n\n".concat(p, "\n\nNow, determine the complexity of the task and decide whether to use an existing skill or create a new one. \nIf you decide to use an existing skill, notify the user and execute the task. \nIf you decide to create a new skill, notify the user and execute the task. \nIf the performance is unsatisfactory, improve the skill with the outcome and update the learned skills repository.");
+}
 
 // get the assistant object from openai or create a new one
 const getAssistant = async (threadId: any) => {
@@ -77,6 +81,7 @@ async function main() {
   
   cli = await cliPrompt(assistant, async (command: string) => {
     return new Promise((resolve) => {
+
       // if there is no api key, then the user is entering it
       const hasApiKey = config.config.openai_api_key && config.config.openai_api_key.length > 0;
       if (!hasApiKey) {
