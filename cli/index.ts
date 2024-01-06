@@ -16,8 +16,14 @@ let asst: any = undefined; // asst is used to keep track of the assistant
 let runningMode = false; // runningMode is used to keep track of whether the assistant is running or not
 let request = process.argv.slice(2).join(' '); // request is used to keep track of the user's request
 
-function getPersonaPrompt(p: any) {
-  return "First, load your list of learned skills and tools in preparation for the interaction. Then carefully read through the given task: \n\n".concat(p, "\n\nNow, determine the complexity of the task and decide whether to use an existing skill or create a new one. \nIf you decide to use an existing skill, notify the user and execute the task. \nIf you decide to create a new skill, notify the user and execute the task. \nIf the performance is unsatisfactory, improve the skill with the outcome and update the learned skills repository.");
+function getPersonaPrompt(p: string) {
+  return `First, load your list of tools in preparation for the interaction. Then carefully read through the given task: 
+
+${p}
+
+Now, determine the complexity of the task and decide whether you should decompose it into subtasks.
+If the task is simple, perform it with the available tools. If the task is complex, decompose it into subtasks and perform each subtask with the available tools.
+Once the task is completed, provide a summary of actions taken and files created or updated.`;
 }
 
 // get the assistant object from openai or create a new one
