@@ -67,7 +67,7 @@ export class Spinner {
 
     private persist(icon: string, message?: string): void {
         this.stop();
-        process.stdout.write(`${icon} ${message || ''}\n`); // Write the message to stdout with an icon and start a new line
+        process.stdout.write(`${icon} ${message || ''}\r\n`); // Write the message to stdout with an icon and start a new line
     }
 }
 

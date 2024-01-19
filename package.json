@@ -1,6 +1,6 @@
 {
   "name": "@nomyx/assistant-cli",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "A javascript-based CLI wrapper around the ai-assistant",
   "main": "dist/cli/index.js",
   "publisher": "Nomyx",

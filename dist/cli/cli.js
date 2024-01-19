@@ -94,15 +94,15 @@ var Cli = /** @class */ (function () {
         enumerable: false,
         configurable: true
     });
-    Cli.prototype.updateSpinner = function (msg) {
+    Cli.prototype.updateSpinner = function (msg, details) {
         var spl = msg.split(' ');
         // if the last element is a number, then it's a progress update
         if (spl.length > 1 && !isNaN(spl[spl.length - 1])) {
             msg = spl.slice(0, spl.length - 1).join(' ');
-            this.spinner.setTitle(spl.join(' '));
+            this.spinner.setTitle(spl.join(' ') + ' ' + details);
         }
         if (this.spinnerText !== msg) {
-            this.spinnerText = msg;
+            this.spinnerText = msg + ' ' + details;
             this.spinner.success(msg);
             this.spinner.start();
         }

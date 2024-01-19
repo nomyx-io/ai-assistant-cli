@@ -57,7 +57,7 @@ async function main() {
     let result;
     try {
       result = await assistant.run(getPersonaPrompt(request), config.tools, config.schemas, config.config.openai_api_key, (event: string, value: any) => {
-        cli && cli.updateSpinner(event);
+        cli && cli.updateSpinner(event, value);
       });
     } catch (err: any) {
       // a common error is too many requests, so we'll retry after the retry-after header
