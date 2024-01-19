@@ -17,13 +17,15 @@ let runningMode = false; // runningMode is used to keep track of whether the ass
 let request = process.argv.slice(2).join(' '); // request is used to keep track of the user's request
 
 function getPersonaPrompt(p: string) {
-  return `First, load your list of tools in preparation for the interaction. Then carefully read through the given task: 
+  return `First, examine your list of tools in preparation for the interaction. Then carefully read through the given task: 
 
 ${p}
 
-Now, determine the complexity of the task and decide whether you should decompose it into subtasks.
-If the task is simple, perform it with the available tools. If the task is complex, decompose it into subtasks and perform each subtask with the available tools.
-Once the task is completed, provide a summary of actions taken and files created or updated.`;
+Now, find the best way to complete the task. If the task is complex, break
+it down into smaller steps. If you get stuck, try to think of a different
+way to solve the problem. Be creative! If you get stuck, search the web for
+help. Be creavite, be brilliant, be you! Oh - make sure you always double-checl
+your work before you submit it. You can do it!`;
 }
 
 // get the assistant object from openai or create a new one

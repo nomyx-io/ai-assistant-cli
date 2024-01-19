@@ -49,7 +49,7 @@ var asst = undefined; // asst is used to keep track of the assistant
 var runningMode = false; // runningMode is used to keep track of whether the assistant is running or not
 var request = process.argv.slice(2).join(' '); // request is used to keep track of the user's request
 function getPersonaPrompt(p) {
-    return "First, load your list of tools in preparation for the interaction. Then carefully read through the given task: \n\n".concat(p, "\n\nNow, determine the complexity of the task and decide whether you should decompose it into subtasks.\nIf the task is simple, perform it with the available tools. If the task is complex, decompose it into subtasks and perform each subtask with the available tools.\nOnce the task is completed, provide a summary of actions taken and files created or updated.");
+    return "First, examine your list of tools in preparation for the interaction. Then carefully read through the given task: \n\n".concat(p, "\n\nNow, find the best way to complete the task. If the task is complex, break\nit down into smaller steps. If you get stuck, try to think of a different\nway to solve the problem. Be creative! If you get stuck, search the web for\nhelp. Be creavite, be brilliant, be you! Oh - make sure you always double-checl\nyour work before you submit it. You can do it!");
 }
 // get the assistant object from openai or create a new one
 var getAssistant = function (threadId) { return __awaiter(void 0, void 0, void 0, function () {
