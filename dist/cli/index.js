@@ -111,7 +111,7 @@ function main() {
                                 case 2:
                                     _a.trys.push([2, 4, , 8]);
                                     return [4 /*yield*/, assistant.run(getPersonaPrompt(request), config.tools, config.schemas, config.config.openai_api_key, function (event, value) {
-                                            cli && cli.updateSpinner(event);
+                                            cli && cli.updateSpinner(event, value);
                                         })];
                                 case 3:
                                     result = _a.sent();

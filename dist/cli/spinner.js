@@ -58,7 +58,7 @@ var Spinner = /** @class */ (function () {
     };
     Spinner.prototype.persist = function (icon, message) {
         this.stop();
-        process_1.default.stdout.write("".concat(icon, " ").concat(message || '', "\n")); // Write the message to stdout with an icon and start a new line
+        process_1.default.stdout.write("".concat(icon, " ").concat(message || '', "\r\n")); // Write the message to stdout with an icon and start a new line
     };
     return Spinner;
 }());

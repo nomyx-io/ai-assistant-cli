@@ -20,6 +20,7 @@ if (!fs.existsSync(configPath)) {
   apiKey && fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 } else {
   config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  console.log(configPath);
 }
 
 const baseTools: any = require('@nomyx/assistant-tools')(config);

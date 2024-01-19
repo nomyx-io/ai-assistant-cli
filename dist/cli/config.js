@@ -24,6 +24,7 @@ if (!fs_1.default.existsSync(configPath)) {
 }
 else {
     config = JSON.parse(fs_1.default.readFileSync(configPath, 'utf8'));
+    console.log(configPath);
 }
 var baseTools = require('@nomyx/assistant-tools')(config);
 exports.default = config;
