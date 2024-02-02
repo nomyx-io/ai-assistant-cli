@@ -44,12 +44,15 @@ var highlight = require('cli-highlight').highlight;
 var configPath = path.join(__dirname, '../..', 'config.json');
 var cliPrompt = require('./cli');
 // global variables
-var threadId = undefined; // threadId is used to keep track of the threadId of the assistant
+var threadId = config.config.threadId; // threadId is used to keep track of the threadId of the assistant
+if (config.config.threadId) {
+    console.log('threadId:', config.config.threadId);
+}
 var asst = undefined; // asst is used to keep track of the assistant
 var runningMode = false; // runningMode is used to keep track of whether the assistant is running or not
 var request = process.argv.slice(2).join(' '); // request is used to keep track of the user's request
 function getPersonaPrompt(p) {
-    return "First, examine your list of tools in preparation for the interaction. Then carefully read through the given task: \n\n".concat(p, "\n\nNow, find the best way to complete the task. If the task is complex, break\nit down into smaller steps. If you get stuck, try to think of a different\nway to solve the problem. Be creative! If you get stuck, search the web for\nhelp. Be creavite, be brilliant, be you! Oh - make sure you always double-checl\nyour work before you submit it. You can do it!");
+    return "First, examine your list of tools in preparation for the interaction. Then carefully read through the given task: \n\n".concat(p, "\n\nNow, find the best way to complete the task. If the task is complex, break\nit down into smaller steps. If you get stuck, try to think of a different\nway to solve the problem. Be creative! If you get stuck, search the web for\nhelp. Be creavite, be brilliant, be you!");
 }
 // get the assistant object from openai or create a new one
 var getAssistant = function (threadId) { return __awaiter(void 0, void 0, void 0, function () {
@@ -109,29 +112,36 @@ function main() {
                                     assistant = _a.sent();
                                     _a.label = 2;
                                 case 2:
-                                    _a.trys.push([2, 4, , 8]);
-                                    return [4 /*yield*/, assistant.run(getPersonaPrompt(request), config.tools, config.schemas, config.config.openai_api_key, function (event, value) {
-                                            cli && cli.updateSpinner(event, value);
-                                        })];
-                                case 3:
-                                    result = _a.sent();
-                                    return [3 /*break*/, 8];
+                                    _a.trys.push([2, 6, , 10]);
+                                    if (!(request === 'clear')) return [3 /*break*/, 3];
+                                    config.config.threadId = threadId = undefined;
+                                    return [2 /*return*/, {
+                                            message: result,
+                                            threadId: undefined
+                                        }];
+                                case 3: return [4 /*yield*/, assistant.run(getPersonaPrompt(request), config.tools, config.schemas, config.config.openai_api_key, function (event, value) {
+                                        cli && cli.updateSpinner(event, value);
+                                    })];
                                 case 4:
+                                    result = _a.sent();
+                                    _a.label = 5;
+                                case 5: return [3 /*break*/, 10];
+                                case 6:
                                     err_1 = _a.sent();
-                                    if (!(err_1.response && err_1.response.status === 429)) return [3 /*break*/, 7];
+                                    if (!(err_1.response && err_1.response.status === 429)) return [3 /*break*/, 9];
                                     console.log('Too many requests, pausing for 30 seconds');
                                     result_1 = err_1.message;
                                     retryAfter = err_1.response.headers['retry-after'];
-                                    if (!retryAfter) return [3 /*break*/, 6];
+                                    if (!retryAfter) return [3 /*break*/, 8];
                                     retryAfterMs_1 = parseInt(retryAfter) * 1000;
                                     result_1 += "... retrying in ".concat(retryAfter, " seconds");
                                     return [4 /*yield*/, new Promise(function (resolve) { return setTimeout(resolve, retryAfterMs_1); })];
-                                case 5:
+                                case 7:
                                     _a.sent();
-                                    _a.label = 6;
-                                case 6: return [2 /*return*/, "Error: ".concat(result_1)];
-                                case 7: return [3 /*break*/, 8];
-                                case 8:
+                                    _a.label = 8;
+                                case 8: return [2 /*return*/, "Error: ".concat(result_1)];
+                                case 9: return [3 /*break*/, 10];
+                                case 10:
                                     try {
                                         highlighted = highlight(result, { language: 'javascript', ignoreIllegals: true });
                                         console.log('\n' + highlighted + '\n');
@@ -160,6 +170,8 @@ function main() {
                                         // process the user's command                                                                                                                                                                                                                                      
                                         processUserCommand(command, threadId).then(function (messageResults) {
                                             threadId = messageResults['threadId'];
+                                            config.config.threadId = threadId;
+                                            config.updateConfig(config.config);
                                             resolve(false);
                                         });
                                     })];

@@ -9,7 +9,7 @@ if (!fs.existsSync(configPath)) {
   const apiKey = process.env.OPENAI_API_KEY || '';
   config = {
     'openai_api_key': apiKey,
-    'model': 'gpt-4-1106-preview',
+    'model': 'gpt-4-turbo-preview',
     "playHT": {
         "apiKey": process.env.PLAYHT_API_KEY || "",
         "userId": process.env.PLAYHT_USER_ID || "",
@@ -31,4 +31,8 @@ module.exports = {
   config,
   tools: baseTools.funcs,
   schemas: baseTools.schemas,
+  updateConfig: (newConfig: any) => {
+    config = newConfig;
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  }
 }

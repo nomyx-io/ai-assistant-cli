@@ -11,7 +11,10 @@ const configPath = path.join(__dirname, '../..', 'config.json');
 const cliPrompt = require('./cli');
 
 // global variables
-let threadId: any = undefined; // threadId is used to keep track of the threadId of the assistant
+let threadId: any = config.config.threadId; // threadId is used to keep track of the threadId of the assistant
+if(config.config.threadId) {
+  console.log('threadId:', config.config.threadId);
+}
 let asst: any = undefined; // asst is used to keep track of the assistant
 let runningMode = false; // runningMode is used to keep track of whether the assistant is running or not
 let request = process.argv.slice(2).join(' '); // request is used to keep track of the user's request
@@ -24,8 +27,7 @@ ${p}
 Now, find the best way to complete the task. If the task is complex, break
 it down into smaller steps. If you get stuck, try to think of a different
 way to solve the problem. Be creative! If you get stuck, search the web for
-help. Be creavite, be brilliant, be you! Oh - make sure you always double-checl
-your work before you submit it. You can do it!`;
+help. Be creavite, be brilliant, be you!`;
 }
 
 // get the assistant object from openai or create a new one
@@ -58,7 +60,13 @@ async function main() {
     // run the assistant with the user's request
     let result;
     try {
-      result = await assistant.run(getPersonaPrompt(request), config.tools, config.schemas, config.config.openai_api_key, (event: string, value: any) => {
+      if(request === 'clear') {
+        config.config.threadId = threadId = undefined;
+        return {
+          message: result,
+          threadId: undefined
+        }
+      } else result = await assistant.run(getPersonaPrompt(request), config.tools, config.schemas, config.config.openai_api_key, (event: string, value: any) => {
         cli && cli.updateSpinner(event, value);
       });
     } catch (err: any) {
@@ -101,6 +109,8 @@ async function main() {
       // process the user's command                                                                                                                                                                                                                                      
       processUserCommand(command, threadId).then((messageResults: any) => {                                                                                                                                                                        
         threadId = messageResults['threadId'];
+        config.config.threadId = threadId;
+        config.updateConfig(config.config);
         resolve(false);                                                                                                                                                                                                                                                                                                                                                                                                                                            
       }); 
     })
