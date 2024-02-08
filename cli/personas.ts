@@ -108,7 +108,7 @@ export class DynamicAssistantPrompt {
 
 export function getPersonaPrompt(schemas: any) {
     const webContextPrompt = new DynamicAssistantPrompt();
-    const toolsList = Object.keys(schemas).map((key: any) => `${key}: ${schemas[key].type} ${(schemas[key].required === true ? "required" : "optional")} ${(schemas[key].description)}`).join("\n");
+    const toolsList = schemas.map((schema: any) => `${schema.function.name}: ${schema.function.description}`).join("\n");
 
     webContextPrompt.addSection("Preamble", preamble);
     webContextPrompt.addSection("Toolset", toolsList);

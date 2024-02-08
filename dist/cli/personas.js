@@ -99,7 +99,7 @@ exports.DynamicAssistantPrompt = DynamicAssistantPrompt;
 // {type: 'function', function: {name: 'show_message', description: 'Show the given text as a message to the user', parameters: {type: 'object', properties: {message: {type: 'string', description: 'The message text to show to the user'}}, required: ['message']}}},
 function getPersonaPrompt(schemas) {
     var webContextPrompt = new DynamicAssistantPrompt();
-    var toolsList = Object.keys(schemas).map(function (key) { return "".concat(key, ": ").concat(schemas[key].type, " ").concat((schemas[key].required === true ? "required" : "optional"), " ").concat((schemas[key].description)); }).join("\n");
+    var toolsList = schemas.map(function (schema) { return "".concat(schema.function.name, ": ").concat(schema.function.description); }).join("\n");
     webContextPrompt.addSection("Preamble", preamble);
     webContextPrompt.addSection("Toolset", toolsList);
     webContextPrompt.addSection("Input Format", Object.keys(inputFormat).map(function (key) { return "".concat(key, ": ").concat(inputFormat[key].type, " ").concat(inputFormat[key].required === true ? "required" : "optional", " ").concat(inputFormat[key].description); }).join("\n"));
