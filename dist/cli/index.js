@@ -35,10 +35,12 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+Object.defineProperty(exports, "__esModule", { value: true });
 var cat = require('shelljs').cat;
 var fs = require('fs');
 var path = require('path');
-var _a = require("@nomyx/assistant"), Assistant = _a.Assistant, Thread = _a.Thread, loadNewPersona = _a.loadNewPersona;
+var personas_1 = require("./personas");
+var _a = require("@nomyx/assistant"), Assistant = _a.Assistant, Thread = _a.Thread;
 var config = require('./config');
 var highlight = require('cli-highlight').highlight;
 var configPath = path.join(__dirname, '../..', 'config.json');
@@ -51,46 +53,48 @@ if (config.config.threadId) {
 var asst = undefined; // asst is used to keep track of the assistant
 var runningMode = false; // runningMode is used to keep track of whether the assistant is running or not
 var request = process.argv.slice(2).join(' '); // request is used to keep track of the user's request
-function getPersonaPrompt(p) {
-    return "First, examine your list of tools in preparation for the interaction. Then carefully read through the given task: \n\n".concat(p, "\n\nNow, find the best way to complete the task. If the task is complex, break\nit down into smaller steps. If you get stuck, try to think of a different\nway to solve the problem. Be creative! If you get stuck, search the web for\nhelp. Be creavite, be brilliant, be you!");
-}
 // get the assistant object from openai or create a new one
 var getAssistant = function (threadId) { return __awaiter(void 0, void 0, void 0, function () {
-    var assistants, assistant, _a, _b, _c, _d, _e;
-    return __generator(this, function (_f) {
-        switch (_f.label) {
+    var assistants, assistant, pp, _a, _b;
+    return __generator(this, function (_c) {
+        switch (_c.label) {
             case 0:
                 if (asst) {
                     return [2 /*return*/, asst];
                 }
                 return [4 /*yield*/, Assistant.list(config.config.openai_api_key)];
             case 1:
-                assistants = _f.sent();
+                assistants = _c.sent();
                 assistant = asst = assistants.find(function (a) { return a.name === config.config.assistant_name; });
-                if (!!assistant) return [3 /*break*/, 4];
-                _b = (_a = Assistant).create;
-                _c = [config.config.assistant_name];
-                return [4 /*yield*/, loadNewPersona(config.schemas)];
-            case 2: return [4 /*yield*/, _b.apply(_a, _c.concat([_f.sent(), config.schemas,
-                    config.config.model,
-                    threadId]))];
-            case 3:
-                asst = _f.sent();
+                if (!!assistant) return [3 /*break*/, 3];
+                pp = (0, personas_1.getPersonaPrompt)(config.schemas);
+                return [4 /*yield*/, Assistant.create(config.config.assistant_name, pp, config.schemas, config.config.model, threadId)];
+            case 2:
+                asst = _c.sent();
                 return [2 /*return*/, asst];
-            case 4:
-                _d = threadId;
-                if (!_d) return [3 /*break*/, 6];
-                _e = assistant;
+            case 3:
+                _a = threadId;
+                if (!_a) return [3 /*break*/, 5];
+                _b = assistant;
                 return [4 /*yield*/, Thread.get(threadId)];
+            case 4:
+                _a = (_b.thread = _c.sent());
+                _c.label = 5;
             case 5:
-                _d = (_e.thread = _f.sent());
-                _f.label = 6;
-            case 6:
-                _d;
+                _a;
                 return [2 /*return*/, assistant];
         }
     });
 }); };
+function prettyPrint(result) {
+    try {
+        var highlighted = highlight(result, { language: 'javascript', ignoreIllegals: true });
+        console.log('\n' + highlighted + '\n');
+    }
+    catch (err) {
+        console.log(result);
+    }
+}
 var assistant;
 var cli;
 function main() {
@@ -103,7 +107,8 @@ function main() {
                 case 1:
                     assistant = _a.sent();
                     processUserCommand = function (request, threadId) { return __awaiter(_this, void 0, void 0, function () {
-                        var result, err_1, result_1, retryAfter, retryAfterMs_1, highlighted;
+                        var result, message_1, iterate_1, err_1, result_1, retryAfter, retryAfterMs_1;
+                        var _this = this;
                         return __generator(this, function (_a) {
                             switch (_a.label) {
                                 case 0: return [4 /*yield*/, getAssistant(threadId)];
@@ -119,11 +124,50 @@ function main() {
                                             message: result,
                                             threadId: undefined
                                         }];
-                                case 3: return [4 /*yield*/, assistant.run(getPersonaPrompt(request), config.tools, config.schemas, config.config.openai_api_key, function (event, value) {
-                                        cli && cli.updateSpinner(event, value);
-                                    })];
+                                case 3:
+                                    message_1 = {
+                                        requirements: request,
+                                        percent_complete: 0,
+                                        next_task: "",
+                                        comments: "",
+                                    };
+                                    iterate_1 = function () { return __awaiter(_this, void 0, void 0, function () {
+                                        var next_task, update, warning, flow_control, percent_complete, _message_1, _message;
+                                        return __generator(this, function (_a) {
+                                            switch (_a.label) {
+                                                case 0: return [4 /*yield*/, assistant.run(JSON.stringify(message_1), config.tools, config.schemas, config.config.openai_api_key, function (event, value) { })];
+                                                case 1:
+                                                    result = _a.sent();
+                                                    message_1 = JSON.parse(result);
+                                                    // if the assistant is awaiting a user response, then we'll iterate again to get it
+                                                    if (message_1.flow_control === 'awaiting_user_response') {
+                                                        return [2 /*return*/];
+                                                    }
+                                                    next_task = message_1.next_task;
+                                                    update = message_1.update;
+                                                    warning = message_1.warning;
+                                                    flow_control = message_1.flow_control;
+                                                    // remove the fields that we don't want to go back to the assistant
+                                                    delete message_1.update;
+                                                    delete message_1.flow_control;
+                                                    delete message_1.warning;
+                                                    percent_complete = message_1.percent_complete;
+                                                    if (percent_complete === 100 || flow_control === 'complete') {
+                                                        _message_1 = "complete. ".concat(update);
+                                                        return [2 /*return*/, _message_1];
+                                                    }
+                                                    _message = "percent_complete: ".concat(percent_complete, ", next_task: ").concat(next_task, ", update: ").concat(update).concat(warning ? ", warning: ".concat(warning) : "").concat(flow_control ? ", flow_control: ".concat(flow_control) : "");
+                                                    prettyPrint(_message);
+                                                    return [4 /*yield*/, iterate_1()];
+                                                case 2:
+                                                    _a.sent();
+                                                    return [2 /*return*/];
+                                            }
+                                        });
+                                    }); };
+                                    return [4 /*yield*/, iterate_1()];
                                 case 4:
-                                    result = _a.sent();
+                                    _a.sent();
                                     _a.label = 5;
                                 case 5: return [3 /*break*/, 10];
                                 case 6:
@@ -142,13 +186,7 @@ function main() {
                                 case 8: return [2 /*return*/, "Error: ".concat(result_1)];
                                 case 9: return [3 /*break*/, 10];
                                 case 10:
-                                    try {
-                                        highlighted = highlight(result, { language: 'javascript', ignoreIllegals: true });
-                                        console.log('\n' + highlighted + '\n');
-                                    }
-                                    catch (err) {
-                                        console.log(result);
-                                    }
+                                    prettyPrint(result);
                                     return [2 /*return*/, {
                                             message: result,
                                             threadId: assistant.thread.id

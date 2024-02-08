@@ -2,8 +2,9 @@ const { cat } = require('shelljs');
 const fs = require('fs');
 const path = require('path');
 
+import { getPersonaPrompt } from "./personas";
 
-const { Assistant, Thread, loadNewPersona } = require("@nomyx/assistant");
+const { Assistant, Thread } = require("@nomyx/assistant");
 const config = require('./config');
 
 const highlight = require('cli-highlight').highlight;
@@ -19,26 +20,16 @@ let asst: any = undefined; // asst is used to keep track of the assistant
 let runningMode = false; // runningMode is used to keep track of whether the assistant is running or not
 let request = process.argv.slice(2).join(' '); // request is used to keep track of the user's request
 
-function getPersonaPrompt(p: string) {
-  return `First, examine your list of tools in preparation for the interaction. Then carefully read through the given task: 
-
-${p}
-
-Now, find the best way to complete the task. If the task is complex, break
-it down into smaller steps. If you get stuck, try to think of a different
-way to solve the problem. Be creative! If you get stuck, search the web for
-help. Be creavite, be brilliant, be you!`;
-}
-
 // get the assistant object from openai or create a new one
 const getAssistant = async (threadId: any) => {
   if (asst) { return asst; }
   const assistants = await Assistant.list(config.config.openai_api_key);
   const assistant = asst = assistants.find((a: any) => a.name === config.config.assistant_name);
   if (!assistant) {
+    const pp = getPersonaPrompt(config.schemas);
     asst = await Assistant.create(
       config.config.assistant_name,
-      await loadNewPersona(config.schemas),
+      pp,
       config.schemas,
       config.config.model,
       threadId
@@ -49,7 +40,16 @@ const getAssistant = async (threadId: any) => {
   return assistant;
 }
 
-let assistant;
+function prettyPrint(result: any) {
+  try {
+    const highlighted = highlight(result, { language: 'javascript', ignoreIllegals: true });
+    console.log('\n' + highlighted + '\n');
+  } catch (err) {
+    console.log(result);
+  }
+}
+
+let assistant: any;
 let cli: any;
 async function main() {
   assistant = await getAssistant(threadId);
@@ -66,10 +66,58 @@ async function main() {
           message: result,
           threadId: undefined
         }
-      } else result = await assistant.run(getPersonaPrompt(request), config.tools, config.schemas, config.config.openai_api_key, (event: string, value: any) => {
-        cli && cli.updateSpinner(event, value);
-      });
-    } catch (err: any) {
+      }
+      else {
+
+        let message: any = {
+          requirements: request,
+          percent_complete: 0,
+          next_task: "",
+          comments: "",
+        }
+        const iterate = async (): Promise<any> => {
+          result = await assistant.run(
+            JSON.stringify(message), 
+            config.tools, 
+            config.schemas, 
+            config.config.openai_api_key, 
+            (event: string, value: any) => {}
+          );
+          message = JSON.parse(result);
+          
+          // if the assistant is awaiting a user response, then we'll iterate again to get it
+          if(message.flow_control === 'awaiting_user_response') {
+            return;
+          }
+
+          // get the state of the assistant
+          const next_task = message.next_task;
+          const update = message.update;
+          const warning = message.warning;
+          const flow_control = message.flow_control;
+
+          // remove the fields that we don't want to go back to the assistant
+          delete message.update;
+          delete message.flow_control;
+          delete message.warning;
+
+          // get the percent complete and exit if it's 100
+          const percent_complete = message.percent_complete;
+          if(percent_complete === 100 || flow_control === 'complete') {
+            const _message = `complete. ${update}`;
+            return _message;
+          }
+
+          // format a message to the user
+          const _message = `percent_complete: ${percent_complete}, next_task: ${next_task}, update: ${update}${warning?`, warning: ${warning}`:``}${flow_control?`, flow_control: ${flow_control}`:``}`;
+          prettyPrint(_message);
+
+          await iterate();
+        }
+        await iterate();
+      }
+    } 
+    catch (err: any) {
       // a common error is too many requests, so we'll retry after the retry-after header
       if (err.response && err.response.status === 429) {
         console.log('Too many requests, pausing for 30 seconds');
@@ -83,12 +131,7 @@ async function main() {
         return `Error: ${result}`
       }
     }
-    try {
-      const highlighted = highlight(result, { language: 'javascript', ignoreIllegals: true });
-      console.log('\n' + highlighted + '\n');
-    } catch (err) {
-      console.log(result);
-    }
+    prettyPrint(result);
     return {
       message: result,
       threadId: assistant.thread.id

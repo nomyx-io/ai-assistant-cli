@@ -18,7 +18,8 @@ if (!fs_1.default.existsSync(configPath)) {
             "userId": process.env.PLAYHT_USER_ID || "",
             "maleVoice": process.env.PLAYHT_MALE_VOICE || "",
             "femaleVoice": process.env.PLAYHT_FEMALE_VOICE || "",
-        }
+        },
+        "assistant_name": "nomyxxx",
     };
     apiKey && fs_1.default.writeFileSync(configPath, JSON.stringify(config, null, 2));
 }
