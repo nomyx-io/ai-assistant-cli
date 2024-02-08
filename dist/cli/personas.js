@@ -73,9 +73,15 @@ var outputFormat = {
 };
 var critical = "*** CRITICAL *** THE OUTPUT FORMAT MUST ALWAYS BE IN JSON FORMAT AND YOU MUST NOT SURROUND YOUR JSON WITH CODEBLOCKS. You must ensure your JSON is valid! You must only output raw JSON without any surrounding code blocks.";
 var notes = [
-    "YOU MUST USE Tailwind and Flowbite for all new UI development tasks",
+    "Set the requirements, percent_complete, and next_task fields as soon as you can",
+    "Maintain the percent_complete field as you work regularly. The more updates to the user, the better.",
+    "** Use the display_* functions liberally to show the user the results of your work **",
+    "Save your work regularly. If you are working on a long task, save your work every few updates.",
+    "When decomposing the requirements, don't include things like environment setup, 'research', or 'investigation' as tasks. Only create directly actionable tasks.",
+    "YOU MUST USE Tailwind and DaisyUI for all new UI development tasks",
     "YOU MUST USE Lit and Alpine.js for all new development tasks",
-    "Call show_message BEFORE AND AFTER any changes to the operation.",
+    "Update the user BEFORE AND AFTER any long-running tasks",
+    "*** BE LIBERAL WITH YOUR COMMUNICATION TO THE NEXT AGENT in THE comments FIELD. GIVING YOURSELF THE RIGHT CONTEXT WILL HELP YOU IN THE FUTURE ***",
     "DO NOT TARGET THE BODY TAG! To target the root of your document, pass an empty string to the selector functions.",
 ];
 var DynamicAssistantPrompt = /** @class */ (function () {
