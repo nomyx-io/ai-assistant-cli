@@ -536,7 +536,7 @@ class CommandProcessor {
         const loop = async () => {
           const ret = await this.assistantRun.runAssistant(JSON.stringify({
             requirements: command,
-            complete: false
+            percent_complete: developerToolbox.state.percent_complete,
           }));
           if (developerToolbox.state.complete || developerToolbox.state.percent_complete === 100) {
             return ret;
