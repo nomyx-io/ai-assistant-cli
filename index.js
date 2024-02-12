@@ -124,7 +124,8 @@ class AssistantRunner {
     this.run = await this.openai.beta.threads.runs.create(this.thread.id, { assistant_id: this.assistant.id });
     this.status = 'starting';
     this.latestMessage = '';
-
+    this.startSpinner();
+    
     const loop = async () => {
 
       // we retrieve the latest state of the run
