@@ -13,7 +13,7 @@ const commands = args.filter((arg) => !arg.startsWith('--'));
 
 // look for the --help flag
 if (flags.includes('--help')) {
-  console.log('Usage: node rl.js [flags] [commands]');
+  console.log('Usage: assistant [flags] [commands]');
   console.log('Flags:');
   console.log('  --help: Display this help message');
   console.log('  --version: Display the version of the program');
