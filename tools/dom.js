@@ -100,10 +100,61 @@ const toolSchema = {
           required: ['path', 'selector', 'attribute', 'value']
         }
       }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'get_summarized_selector',
+        description: 'Summarizes the content of elements matching the CSS selector in the specified HTML file.',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'The file path to the HTML file.' },
+            selector: { type: 'string', description: 'The CSS selector to match elements.' },
+            level: { type: 'number', description: 'The depth of child elements to summarize. 0 for detailed information.' },
+          },
+          required: ['path', 'selector']
+        }
+      }
     }
   ],
   tools: {
-    html_selector_append_child: function ({path, selector, value}) {
+    get_summarized_selector: function ({ path, selector, level = 0 }) {
+      const fs = require('fs');
+      const { JSDOM } = require('jsdom');
+
+      // Load the HTML file
+      const htmlContent = fs.readFileSync(path, 'utf8');
+      const dom = new JSDOM(htmlContent);
+      const document = dom.window.document;
+
+      // Select elements and append the value
+      const elements = document.querySelectorAll(selector);
+      elements.forEach(element => {
+        if (level === 0) {
+          // Base case: detailed information
+          summary.textSummary = element.textContent.slice(0, 100) + '...'; // First 100 chars
+          summary.imageCount += element.querySelectorAll('img').length;
+          summary.linkCount += element.querySelectorAll('a').length;
+          summary.interactiveCount += element.querySelectorAll('input, button, select, textarea').length;
+        } else {
+          // Summarize child elements
+          const children = element.children;
+          for (let i = 0; i < children.length; i++) {
+            let childSummary = summarizeHTMLElement(children[i], level - 1);
+            summary.textSummary += childSummary.textSummary; // Concatenate text summaries
+            summary.imageCount += childSummary.imageCount;
+            summary.linkCount += childSummary.linkCount;
+            summary.interactiveCount += childSummary.interactiveCount;
+          }
+          // Simplify the summary for this level
+          summary.textSummary += `${summary.textSummary.substring(0, 50)}... (${children.length} elements)\n`;
+        }
+      });
+      let summary = { textSummary: '', imageCount: 0, linkCount: 0, interactiveCount: 0 };
+      return summary;
+    },
+    html_selector_append_child: function ({ path, selector, value }) {
       const fs = require('fs');
       const { JSDOM } = require('jsdom');
 
@@ -121,7 +172,7 @@ const toolSchema = {
 
       return 'Content appended successfully.';
     },
-    html_selector_replace_child: function ({path, selector, value}) {
+    html_selector_replace_child: function ({ path, selector, value }) {
       const fs = require('fs');
       const { JSDOM } = require('jsdom');
 
@@ -139,7 +190,7 @@ const toolSchema = {
 
       return 'Content replaced successfully.';
     },
-    html_selector_remove_child: function ({path, selector, value}) {
+    html_selector_remove_child: function ({ path, selector, value }) {
       const fs = require('fs');
       const { JSDOM } = require('jsdom');
 
@@ -157,7 +208,7 @@ const toolSchema = {
 
       return 'Content removed successfully.';
     },
-    html_selector_get_child: function ({path, selector}) {
+    html_selector_get_child: function ({ path, selector }) {
       const fs = require('fs');
       const { JSDOM } = require('jsdom');
 
@@ -173,7 +224,7 @@ const toolSchema = {
 
       return values;
     },
-    html_selector_get_attribute: function ({path, selector, attribute}) {
+    html_selector_get_attribute: function ({ path, selector, attribute }) {
       const fs = require('fs');
       const { JSDOM } = require('jsdom');
 
@@ -189,7 +240,7 @@ const toolSchema = {
 
       return values;
     },
-    html_selector_set_attribute: function ({path, selector, attribute, value}) {
+    html_selector_set_attribute: function ({ path, selector, attribute, value }) {
       const fs = require('fs');
       const { JSDOM } = require('jsdom');
 
