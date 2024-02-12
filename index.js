@@ -534,7 +534,7 @@ class CommandProcessor {
         }
         this.assistantRun = new AssistantRunner(openai, this.assistant, developerToolbox.tools, developerToolbox.schemas);
         const loop = async () => {
-          const ret = this.assistantRun.runAssistant(JSON.stringify({
+          const ret = await this.assistantRun.runAssistant(JSON.stringify({
             requirements: command,
             complete: false
           }));
