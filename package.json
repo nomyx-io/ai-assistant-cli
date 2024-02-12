@@ -1,7 +1,7 @@
 {
   "name": "@nomyx/assistant-cli",
   "version": "2.0.0",
-  "description": "A javascript-based CLI wrapper around the ai-assistant",
+  "description": "A javascript-based assistant that can help you with your daily tasks",
   "main": "./index.js",
   "publisher": "Nomyx",
   "repository": {
@@ -19,8 +19,6 @@
   "author": "Sebastian Schepis <sebastian.s@nomyx.io>",
   "license": "ISC",
   "dependencies": {
-    "@nomyx/assistant": "^1.6.2",
-    "@nomyx/assistant-tools": "^1.6.6",
     "cli-highlight": "^2.1.11",
     "cli-progress": "^3.12.0",
     "dotenv": "^16.4.1",
