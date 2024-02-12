@@ -267,11 +267,11 @@ CALL user_chat_get to get the user's chat messages.
       ECHO a response to each message
     END FOR
     perform adjustments to the requirements based on messages
-    CALL requirements_set to update the requirements
+    CALL requirements_getset to update the requirements
     CALL task_set_current to 'decompose requirements'
     EXIT
 
-CALL requirements_get to get the existing requirements.
+CALL requirements_getset to get the existing requirements.
 
   IF the requirements have changed
 
@@ -280,35 +280,35 @@ CALL requirements_get to get the existing requirements.
       DO THE WORK: Use the tools at your disposal to help you.
         * Execute tasks required to meet the new requirements within this iteration. *
 
-      CALL percent_complete_set to update the percent complete to 100
-      CALL status_set to set the status to 'complete'
+      CALL percent_complete_getset to update the percent complete to 100
+      CALL status_getset to set the status to 'complete'
       ECHO a status to the user
       EXIT
   
     ELSE
-      CALL requirements_set to update with the new requirements
-      CALL percent_complete_set to reset the percent complete to 0
-      CALL task_set_current to 'decompose requirements'
+      CALL requirements_getset to update with the new requirements
+      CALL percent_complete_getset to reset the percent complete to 0
+      CALL current_task_getset to 'decompose requirements'
       ECHO a status to the user
       EXIT
 
   ELSE start working on the current task.
 
-    IF get_current_task = 'decompose requirements'
+    IF current_task_getset = 'decompose requirements'
 
       Decompose the requirements into actionable tasks
-      CALL set_tasks to set these tasks. This automatically sets the current task to the first task.
-      CALL percent_complete_set to 2
+      CALL tasks_getset to set these tasks. This automatically sets the current task to the first task.
+      CALL percent_complete_getset to 2
       ECHO a status to the user
       EXIT
 
     ELSE
 
       work on the current task
-        CALL status_set to set the status to 'working'
+        CALL status_getset to set the status to 'working'
         DO THE WORK: Progress the task forward using available tools.
-        CALL percent_complete_set to update the percent complete
-        CALL ai_notes_set to set notes and comments for continuity
+        CALL percent_complete_getset to update the percent complete
+        CALL ai_notes_getset to set notes and comments for continuity
 
         IF the task is completed,
 
@@ -317,17 +317,17 @@ CALL requirements_get to get the existing requirements.
             IF there is a next task,
               EXIT
             ELSE
-              CALL status_set to set the status to 'complete'
+              CALL status_getset to set the status to 'complete'
               ECHO a status to the user
               EXIT
 
 ON ERROR:
-  CALL status_set to set the status to 'error'
+  CALL status_getset to set the status to 'error'
   CALL error to log the FULL TECHNICAL DETAILS of the error message
   EXIT
 
 ON WARNING:
-  CALL status_set to set the status to 'warning'
+  CALL status_getset to set the status to 'warning'
   CALL warn to log the warning message
 
 ALWAYS:
@@ -346,22 +346,16 @@ ALWAYS:
         ai_notes: '',
     },
     tools: {
-        requirements_get: function (_) { return developerToolbox.state.requirements },
-        requirements_set: function ({ value }) { developerToolbox.state.requirements = value; return developerToolbox.state.requirements },
-        percent_complete_get: function (_) { console.log(developerToolbox.state.percent_complete); return developerToolbox.state.percent_complete },
-        percent_complete_set: function ({ value }) { developerToolbox.state.percent_complete = value; return developerToolbox.state.percent_complete },
-        status_get: function (_) { return developerToolbox.state.status },
-        status_set: function ({ value }) { developerToolbox.state.status = value; return developerToolbox.state.status },
-        tasks_get: function (_) { console.log(developerToolbox.state.tasks.join('\n')); return developerToolbox.state.tasks },
-        tasks_set: function ({ value }) { developerToolbox.state.tasks = value.trim().split('\n'); developerToolbox.state.current_task = developerToolbox.state.tasks[0]; console.log('tasks set to:' + value); return developerToolbox.state.tasks },
-        tasks_get_current: function (_) { console.log(developerToolbox.state.percent_complete); return developerToolbox.state.current_task },
-        tasks_set_current: function ({ value }) { developerToolbox.state.current_task = value; console.log('current task set to:' + value); return developerToolbox.state.current_task },
+        requirements_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.requirements; else { developerToolbox.state.requirements = value; return developerToolbox.state.requirements } },
+        percent_complete_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.percent_complete; else { developerToolbox.state.percent_complete = value; return developerToolbox.state.percent_complete } },
+        status_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.status; else {  developerToolbox.state.status = value; return developerToolbox.state.status } },
+        ai_notes_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.ai_notes; else { developerToolbox.state.ai_notes = value; return developerToolbox.state.ai_notes } },
+        tasks_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.tasks; else { developerToolbox.state.tasks = value.trim().split('\n'); developerToolbox.state.current_task = developerToolbox.state.tasks[0]; console.log('tasks set to:' + value); return developerToolbox.state.tasks } },
+        current_task_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.current_task; else { developerToolbox.state.current_task = value; console.log('current task set to:' + value); return developerToolbox.state.current_task } },
         tasks_advance: function (_) { developerToolbox.state.tasks.shift(); developerToolbox.state.current_task = developerToolbox.state.tasks[0]; console.log('task advanced to:' + developerToolbox.state.current_task); console.log(developerToolbox.state.current_task); return developerToolbox.state.current_task },
         warn: function (message) { console.warn(message); return message },
         error: function (message) { console.error(message); return message },
         info: function (message) { console.info(message); return message },
-        ai_notes_get: function (_) { return developerToolbox.state.ai_notes ? developerToolbox.state.ai_notes : 'no notes' },
-        ai_notes_set: function ({ value }) { developerToolbox.state.ai_notes = value; return developerToolbox.state.ai_notes },
         echo: function ({ value }) { console.log(value); return 'echoed: ' + value },
         user_chat_get: function (_) { const uc = developerToolbox.state.user_chat; return (uc && uc.length > 0) ? JSON.stringify(uc) : 'no chat messages' },
         generate_tool: async function ({ requirements }, assistantRef) {
@@ -379,19 +373,13 @@ ALWAYS:
     },
     schemas: [
         { type: 'function', function: { name: 'echo', description: 'Echo a message to the user', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The message to echo to the user' } }, required: ['value'] } } },
-        { type: 'function', function: { name: 'requirements_get', description: 'Get the current requirements' } },
-        { type: 'function', function: { name: 'requirements_set', description: 'Set the requirements', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The new requirements' } }, required: ['value'] } } },
-        { type: 'function', function: { name: 'percent_complete_get', description: 'Get the percent complete' } },
-        { type: 'function', function: { name: 'percent_complete_set', description: 'Set the percent complete', parameters: { type: 'object', properties: { value: { type: 'number', description: 'The percent complete' } }, required: ['value'] } } },
-        { type: 'function', function: { name: 'ai_notes_get', description: 'Get the AI notes' } },
-        { type: 'function', function: { name: 'ai_notes_set', description: 'Set the AI notes', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The new AI notes' } }, required: ['value'] } } },
+        { type: 'function', function: { name: 'requirements_getset', description: 'Get or set the requirements field. Call with no parameters to get the field. Call with a value to set the field.', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The new requirements' } }, required: [] } } },
+        { type: 'function', function: { name: 'percent_complete_getset', description: 'Get or set the percent complete field. Call with no parameters to get the value.', parameters: { type: 'object', properties: { value: { type: 'number', description: 'The percent complete' } }, required: [] } } },
+        { type: 'function', function: { name: 'ai_notes_getset', description: 'Get or set the AI notes. Call with no parameter to get the notes.', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The new AI notes' } }, required: [] } } },
         { type: 'function', function: { name: 'user_chat_get', description: 'Get chat messages from the user' } },
-        { type: 'function', function: { name: 'status_get', description: 'Get the status' } },
-        { type: 'function', function: { name: 'status_set', description: 'Set the status', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The new status' } }, required: ['value'] } } },
-        { type: 'function', function: { name: 'tasks_get', description: 'Get the tasks' } },
-        { type: 'function', function: { name: 'tasks_set', description: 'Set the tasks', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The list of tasks, newline-delimited' } }, required: ['value'] } } },
-        { type: 'function', function: { name: 'tasks_set_current', description: 'Set the current task', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The current task' } }, required: ['value'] } } },
-        { type: 'function', function: { name: 'tasks_get_current', description: 'Get the current task' } },
+        { type: 'function', function: { name: 'status_getset', description: 'Get or set the status. Call with no parameters to get the status', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The new status' } }, required: [] } } },
+        { type: 'function', function: { name: 'tasks_getset', description: 'Get or set the tasks. Call with no parameter to get thet tasks', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The list of tasks, newline-delimited' } }, required: [] } } },
+        { type: 'function', function: { name: 'current_task_getset', description: 'Get or set the current task. Call with no pparameters to get the current task.', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The current task' } }, required: ['value'] } } },
         { type: 'function', function: { name: 'tasks_advance', description: 'Advance the task to the next task' } },
         { type: 'function', function: { name: 'error', description: 'Log an error', parameters: { type: 'object', properties: { message: { type: 'string', description: 'The error message' } }, required: ['message'] } } },
         { type: 'function', function: { name: 'generate_tool', description: 'Generate an assistant tool that will fulfill the given requirements. ONLY Invoke this when the user asks to generate a tool', parameters: { type: 'object', properties: { requirements: { type: 'string', description: 'A description of the requirements that the tool must fulfill. Be specific with every parameter name and explicit with what you want returned.' } }, required: ['message'] } } },
