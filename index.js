@@ -183,7 +183,6 @@ class AssistantRunner {
       return await loop();
 
     }
-    this.startSpinner();
     return await loop();
   }
 
@@ -560,14 +559,21 @@ class CommandProcessor {
       Object.keys(developerToolbox.tools).forEach((key) => {
         developerToolbox.tools[key] = developerToolbox.tools[key].bind(this);
       });
-      this.initAssistant();
+    } else {
+      // create the ./tools directory
+      fs.mkdirSync(path.join(process.cwd(), 'tools'));
     }
-
-    this.initializeReadline();
-    this.startQueueMonitor();
-
-    // trigger a greeting message
-    //setTimeout(()=> this.queue.push(() => this.commandHandlers['greet']()), 1000);
+    this.getCommandHandler = this.getCommandHandler.bind(this);
+    this.initAssistant = this.initAssistant.bind(this);
+    this.initializeReadline = this.initializeReadline.bind(this);
+    this.handleLine = this.handleLine.bind(this);
+    this.startQueueMonitor = this.startQueueMonitor.bind(this);
+    this.success = this.success.bind(this);
+    this.initAssistant().then(() => {
+      this.initializeReadline();
+      this.startQueueMonitor();
+      setTimeout(()=> this.queue.push(() => this.getCommandHandler('greet')()), 1000);
+    })
   }
 
   async createThread() {
