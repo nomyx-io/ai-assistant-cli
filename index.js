@@ -312,7 +312,7 @@ CALL requirements_getset to get the existing requirements.
 
         IF the task is completed,
 
-          CALL advance_task to move to the next task
+          CALL tasks_advance to move to the next task
 
             IF there is a next task,
               EXIT
@@ -536,12 +536,14 @@ class CommandProcessor {
         const loop = async () => {
           const ret = await this.assistantRun.runAssistant(JSON.stringify({
             requirements: command,
+            current_task: developerToolbox.state.current_task || '',
             percent_complete: developerToolbox.state.percent_complete,
           }));
           if (developerToolbox.state.complete || developerToolbox.state.percent_complete === 100) {
             return ret;
           } else {
             console.log(`Percent Complete: ${developerToolbox.state.percent_complete}`);
+            console.log('Current Task: ' + developerToolbox.state.current_task);
             return loop();
           }
         }
