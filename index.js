@@ -294,7 +294,7 @@ CALL requirements_getset to get the existing requirements.
 
   ELSE start working on the current task.
 
-    IF current_task_getset = 'decompose requirements'
+    IF current_task_getset == 'decompose requirements'
 
       Decompose the requirements into actionable tasks
       CALL tasks_getset to set these tasks. This automatically sets the current task to the first task.
@@ -350,7 +350,7 @@ ALWAYS:
         percent_complete_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.percent_complete; else { developerToolbox.state.percent_complete = value; return developerToolbox.state.percent_complete } },
         status_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.status; else {  developerToolbox.state.status = value; return developerToolbox.state.status } },
         ai_notes_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.ai_notes; else { developerToolbox.state.ai_notes = value; return developerToolbox.state.ai_notes } },
-        tasks_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.tasks; else { developerToolbox.state.tasks = value.trim().split('\n'); developerToolbox.state.current_task = developerToolbox.state.tasks[0]; console.log('tasks set to:' + value); return developerToolbox.state.tasks } },
+        tasks_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.tasks; else { developerToolbox.state.tasks = value.trim().split('\n'); developerToolbox.state.current_task = developerToolbox.state.tasks[0]; console.log('tasks set to:' + value + ', current task set to ' + developerToolbox.state.tasks[0]); return developerToolbox.state.tasks } },
         current_task_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.current_task; else { developerToolbox.state.current_task = value; console.log('current task set to:' + value); return developerToolbox.state.current_task } },
         tasks_advance: function (_) { developerToolbox.state.tasks.shift(); developerToolbox.state.current_task = developerToolbox.state.tasks[0]; console.log('task advanced to:' + developerToolbox.state.current_task); console.log(developerToolbox.state.current_task); return developerToolbox.state.current_task },
         error: function ({message}) { console.error(message); return message },
