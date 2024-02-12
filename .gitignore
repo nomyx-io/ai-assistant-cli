@@ -4,4 +4,4 @@ tests
 history.json
 puck.log
 config.json
-./conversations.json
+conversations.json
