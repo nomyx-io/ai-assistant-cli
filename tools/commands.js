@@ -29,6 +29,7 @@ const toolSchema = {
     {type: 'function', function: {name: 'rmdir', description: 'Removes a directory', parameters: {type: 'object', properties: {path: {type: 'string', description: 'The path of the directory to be removed'}}, required: ['path']}}},
     {type: 'function', function: {name: 'rename', description: 'Renames a file or directory', parameters: {type: 'object', properties: {oldPath: {type: 'string', description: 'The current path'}, newPath: {type: 'string', description: 'The new path'}}, required: ['oldPath', 'newPath']}}},
     {type: 'function', function: {name: 'find', description: 'Searches for files and directories based on a pattern', parameters: {type: 'object', properties: {directory: {type: 'string', description: 'The directory to search in'}, pattern: {type: 'string', description: 'The search pattern'}}, required: ['directory', 'pattern']}}},
+    {type: 'function', function: {name: 'call_npm_method', description: 'Calls a method from a npm library', parameters: {type: 'object', properties: {npmlib: {type: 'string', description: 'The name of the npm library'}, method: {type: 'string', description: 'The name of the method to be called'}, args: {type: 'string', description: 'The arguments to be passed to the method'}}, required: ['npmlib', 'method', 'args']}}}
    
 
   ],
@@ -54,6 +55,7 @@ const toolSchema = {
     rmdir: function ({path}) { exec(`rmdir ${path}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
     rename: function ({oldPath, newPath}) { exec(`mv ${oldPath} ${newPath}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
     find: function ({directory, pattern}) { exec(`find ${directory} -name "${pattern}"`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    call_npm_method: function ({npmlib, method, args}) { const ret = require(npmlib)[method](args); return ret ? npmlib  + ' ' + method + ' ' + args + ' called: ' + JSON.stringify(ret) : 'Error calling ' + npmlib + ' ' + method + ' ' + args; }
   }
 }
 module.exports = toolSchema;

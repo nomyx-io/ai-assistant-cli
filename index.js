@@ -582,9 +582,16 @@ class CommandProcessor {
   }
 
   async cancel() {
-    if (!this.thread) { this.cancelling = true; return; }
-    if (!this.run) { this.cancelling = true; return; }
-    return await openai.beta.threads.runs.cancel(this.thread.id, this.run.id);
+    try {
+      if(this.run && this.thread && this.run.status !== 'completed' && this.run.status !== 'cancelled' && this.run.status !== 'idle'&& this.run.status !== 'failed') {
+        console.log('Cancelling run');
+        await openai.beta.threads.runs.cancel(this.thread.id, this.run.id);
+        return true;
+      }
+    } catch (error) {
+      console.error(`Error cancelling run: ${error.message}`);
+      return false;
+    }
   }
 
   async updateConfig(key, value) {
@@ -609,6 +616,8 @@ class CommandProcessor {
         // Moved to success and error handlers to ensure proper re-prompting
       });
     }).on('close', () => {
+      // cancel the assistant run
+      if(this.cancel())
       console.log('bye');
       this.rl.prompt();
     });
