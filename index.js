@@ -338,12 +338,12 @@ ALWAYS:
   MAKE NEW TOOLS: If you need a tool that doesn't exist, create it.
 `,
     state: {
-        requirements: '',
+        requirements: 'no requirements set',
         percent_complete: 0,
         status: 'idle',
         tasks: [],
         current_task: null,
-        ai_notes: '',
+        ai_notes: 'no AI notes.',
     },
     tools: {
         requirements_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.requirements; else { developerToolbox.state.requirements = value; return developerToolbox.state.requirements } },
@@ -353,10 +353,8 @@ ALWAYS:
         tasks_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.tasks; else { developerToolbox.state.tasks = value.trim().split('\n'); developerToolbox.state.current_task = developerToolbox.state.tasks[0]; console.log('tasks set to:' + value); return developerToolbox.state.tasks } },
         current_task_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.current_task; else { developerToolbox.state.current_task = value; console.log('current task set to:' + value); return developerToolbox.state.current_task } },
         tasks_advance: function (_) { developerToolbox.state.tasks.shift(); developerToolbox.state.current_task = developerToolbox.state.tasks[0]; console.log('task advanced to:' + developerToolbox.state.current_task); console.log(developerToolbox.state.current_task); return developerToolbox.state.current_task },
-        warn: function (message) { console.warn(message); return message },
-        error: function (message) { console.error(message); return message },
-        info: function (message) { console.info(message); return message },
-        echo: function ({ value }) { console.log(value); return 'echoed: ' + value },
+        error: function ({message}) { console.error(message); return message },
+        log: function ({message}) { console.log(message); return message },
         user_chat_get: function (_) { const uc = developerToolbox.state.user_chat; return (uc && uc.length > 0) ? JSON.stringify(uc) : 'no chat messages' },
         generate_tool: async function ({ requirements }, assistantRef) {
           toolmakerToolbox.toolmaker = await AssistantRunner.createAssistantFromPersona(toolmakerToolbox.prompt, 'toolmaker', toolmakerToolbox.schemas);
@@ -372,7 +370,6 @@ ALWAYS:
         },
     },
     schemas: [
-        { type: 'function', function: { name: 'echo', description: 'Echo a message to the user', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The message to echo to the user' } }, required: ['value'] } } },
         { type: 'function', function: { name: 'requirements_getset', description: 'Get or set the requirements field. Call with no parameters to get the field. Call with a value to set the field.', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The new requirements' } }, required: [] } } },
         { type: 'function', function: { name: 'percent_complete_getset', description: 'Get or set the percent complete field. Call with no parameters to get the value.', parameters: { type: 'object', properties: { value: { type: 'number', description: 'The percent complete' } }, required: [] } } },
         { type: 'function', function: { name: 'ai_notes_getset', description: 'Get or set the AI notes. Call with no parameter to get the notes.', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The new AI notes' } }, required: [] } } },
@@ -382,6 +379,7 @@ ALWAYS:
         { type: 'function', function: { name: 'current_task_getset', description: 'Get or set the current task. Call with no pparameters to get the current task.', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The current task' } }, required: ['value'] } } },
         { type: 'function', function: { name: 'tasks_advance', description: 'Advance the task to the next task' } },
         { type: 'function', function: { name: 'error', description: 'Log an error', parameters: { type: 'object', properties: { message: { type: 'string', description: 'The error message' } }, required: ['message'] } } },
+        { type: 'function', function: { name: 'log', description: 'Log a log', parameters: { type: 'object', properties: { message: { type: 'string', description: 'The error message' } }, required: ['message'] } } },
         { type: 'function', function: { name: 'generate_tool', description: 'Generate an assistant tool that will fulfill the given requirements. ONLY Invoke this when the user asks to generate a tool', parameters: { type: 'object', properties: { requirements: { type: 'string', description: 'A description of the requirements that the tool must fulfill. Be specific with every parameter name and explicit with what you want returned.' } }, required: ['message'] } } },
     ]
 };
@@ -543,9 +541,11 @@ class CommandProcessor {
           if (developerToolbox.state.complete || developerToolbox.state.percent_complete === 100) {
             return ret;
           } else {
+            console.log(`Percent Complete: ${developerToolbox.state.percent_complete}`);
             return loop();
           }
         }
+        const result = await loop();
 
         this.state.status = 'idle';
         this.rl.prompt();
