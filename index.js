@@ -258,7 +258,7 @@ const developerToolbox = {
     prompt: `INSTRUCTIONS: Implement the given requirements.
 
 Read the input JSON object's requirements field.
-You current working folder is: ${process.cwd()}
+Your current working folder is: ${process.cwd()}
 
 CALL user_chat_get to get the user's chat messages.
 
@@ -505,6 +505,7 @@ class CommandProcessor {
         googleApiKey: process.env.GOOGLE_API_KEY,
         googleCxId: process.env.GOOGLE_CX_ID,
         newsApiKey: process.env.NEWS_API_KEY,
+        assistantSuffix: Math.random().toString(36).substring(7),
       };
       fs.writeFileSync(path.join(process.cwd(), 'config.json'), JSON.stringify(this.config));
     }
@@ -617,7 +618,7 @@ class CommandProcessor {
     const toolmakerAssistants = assistants.filter((assistant) => assistant.name === 'toolmaker');
     const toDelete = [...rlAssistants, ...toolmakerAssistants];
     await Promise.all(toDelete.map((assistant) => openai.beta.assistants.del(assistant.id)));
-    this.assistant = await AssistantRunner.createAssistantFromPersona(developerToolbox.prompt, 'executor', developerToolbox.schemas);
+    this.assistant = await AssistantRunner.createAssistantFromPersona(developerToolbox.prompt, 'assistant_' + this.config.assistantSuffix, developerToolbox.schemas);
   }
 
   initializeReadline() {
