@@ -530,6 +530,15 @@ class CommandProcessor {
       'echo': async (command) => {
         console.log(command);
       },
+      'greet': async () => {
+        const prompt = 'hello, your are my assistant, and I am your user, Sebastian. Please greet me back, and tell me your name.';
+        this.assistantRun = new AssistantRunner(openai, this.assistant, developerToolbox.tools, developerToolbox.schemas);
+
+        const result = await this.assistantRun.runAssistant(prompt);
+        this.state.status = 'idle';
+        this.rl.prompt();
+        return result;
+      },
       '*': async (command) => { // Make sure this is marked as async
         if (this.state.status === 'working' && this.assistantRun) {
           this.assistantRun.chat(command);
@@ -567,6 +576,9 @@ class CommandProcessor {
 
     this.initializeReadline();
     this.startQueueMonitor();
+
+    // trigger a greeting message
+    //setTimeout(()=> this.queue.push(() => this.commandHandlers['greet']()), 1000);
   }
 
   async createThread() {
