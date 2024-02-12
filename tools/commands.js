@@ -8,6 +8,9 @@ const toolSchema = {
   state: {
   },
   schemas: [
+    {type: 'function', function: {name: 'call_npm_method', description: 'Calls a method from a npm library', parameters: {type: 'object', properties: {npmlib: {type: 'string', description: 'The name of the npm library'}, method: {type: 'string', description: 'The name of the method to be called'}, args: {type: 'string', description: 'The arguments to be passed to the method'}}, required: ['npmlib', 'method', 'args']}}},
+    {type: 'function', function: {name: 'list_npm_libraries', description: 'Lists all npm libraries installed in the current directory'}},
+    {type: 'function', function: {name: 'install_npm_library', description: 'Installs a new npm library', parameters: {type: 'object', properties: {library: {type: 'string', description: 'The name of the npm library to be installed'}}, required: ['library']}}},
     {type: 'function', function: {name: 'chpwd', description: 'Updates the current working directory to the specified path', parameters: {type: 'object', properties: {path: {type: 'string', description: 'The directory to which the current working directory should be updated'}}, required: ['path']}}},
     {type: 'function', function: {name: 'pwd', description: 'Echoes back the current working directory'}},
     {type: 'function', function: {name: 'cp', description: 'Copies a file from the source to the destination', parameters: {type: 'object', properties: {source: {type: 'string', description: 'The source file'}, destination: {type: 'string', description: 'The destination file'}}, required: ['source', 'destination']}}},
@@ -29,9 +32,6 @@ const toolSchema = {
     {type: 'function', function: {name: 'rmdir', description: 'Removes a directory', parameters: {type: 'object', properties: {path: {type: 'string', description: 'The path of the directory to be removed'}}, required: ['path']}}},
     {type: 'function', function: {name: 'rename', description: 'Renames a file or directory', parameters: {type: 'object', properties: {oldPath: {type: 'string', description: 'The current path'}, newPath: {type: 'string', description: 'The new path'}}, required: ['oldPath', 'newPath']}}},
     {type: 'function', function: {name: 'find', description: 'Searches for files and directories based on a pattern', parameters: {type: 'object', properties: {directory: {type: 'string', description: 'The directory to search in'}, pattern: {type: 'string', description: 'The search pattern'}}, required: ['directory', 'pattern']}}},
-    {type: 'function', function: {name: 'call_npm_method', description: 'Calls a method from a npm library', parameters: {type: 'object', properties: {npmlib: {type: 'string', description: 'The name of the npm library'}, method: {type: 'string', description: 'The name of the method to be called'}, args: {type: 'string', description: 'The arguments to be passed to the method'}}, required: ['npmlib', 'method', 'args']}}}
-   
-
   ],
   tools: {
     chpwd : function ({path}) { os.chdir(path); toolSchema.state.pwd = os.getcwd(); return "Current Directory: " + toolSchema.state.pwd; },
@@ -55,7 +55,9 @@ const toolSchema = {
     rmdir: function ({path}) { exec(`rmdir ${path}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
     rename: function ({oldPath, newPath}) { exec(`mv ${oldPath} ${newPath}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
     find: function ({directory, pattern}) { exec(`find ${directory} -name "${pattern}"`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    call_npm_method: function ({npmlib, method, args}) { const ret = require(npmlib)[method](args); return ret ? npmlib  + ' ' + method + ' ' + args + ' called: ' + JSON.stringify(ret) : 'Error calling ' + npmlib + ' ' + method + ' ' + args; }
+    call_npm_method: function ({npmlib, method, args}) { const ret = require(npmlib)[method](args); return ret ? npmlib  + ' ' + method + ' ' + args + ' called: ' + JSON.stringify(ret) : 'Error calling ' + npmlib + ' ' + method + ' ' + args; },
+    list_npm_libraries: function (_) { return JSON.stringify(fs.readdirSync(path.join(process.cwd(), 'node_modules'))); },
+    install_npm_library: function ({library}) { exec(`npm install ${library}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); }
   }
 }
 module.exports = toolSchema;
