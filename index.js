@@ -535,7 +535,18 @@ class CommandProcessor {
           return
         }
         this.assistantRun = new AssistantRunner(openai, this.assistant, developerToolbox.tools, developerToolbox.schemas);
-        const result = await this.assistantRun.runAssistant(command);
+        const loop = async () => {
+          const ret = this.assistantRun.runAssistant(JSON.stringify({
+            requirements: command,
+            complete: false
+          }));
+          if (developerToolbox.state.complete || developerToolbox.state.percent_complete === 100) {
+            return ret;
+          } else {
+            return loop();
+          }
+        }
+
         this.state.status = 'idle';
         this.rl.prompt();
     
@@ -573,7 +584,7 @@ class CommandProcessor {
     this.initAssistant().then(() => {
       this.initializeReadline();
       this.startQueueMonitor();
-      setTimeout(()=> this.queue.push(() => this.getCommandHandler('greet')()), 1000);
+      //setTimeout(()=> this.queue.push(() => this.getCommandHandler('greet')()), 1000);
     })
   }
 
