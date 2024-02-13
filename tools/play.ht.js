@@ -2,7 +2,6 @@ require('dotenv').config();
 const PlayHT = require("playht");
 const fs = require('fs');
 var player = require('play-sound')({})
-const config = require('../config');
 
 function getNonce() {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -42,7 +41,7 @@ module.exports = {
     }],
     tools: {
         say_aloud: async ({ text, voice }) => {
-            const config = module.exports.state;
+            var config = require('../config');
             const apiKey = process.env.PLAYHT_AUTHORIZATION;
             const userId = process.env.PLAYHT_USER_ID;
             const maleVoice = process.env.PLAYHT_MALE_VOICE;

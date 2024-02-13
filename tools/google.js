@@ -1,6 +1,13 @@
 // import axios from "axios";
 const axios = require('axios');
-const config = require('../config');
+
+let cxKey = process.env.GOOGLE_CX;
+let apiKey = process.env.GOOGLE_API_KEY;
+try {
+    var config = require('../config');
+    cxKey = config.google.cx;
+    apiKey = config.google.apiKey;
+} catch(e) {}
 
 module.exports = {
     state: {
@@ -10,8 +17,8 @@ module.exports = {
             version: "0.0.1"
         }],
         google: {
-            apiKey: config.googleApiKey,
-            cx: config.googleCxId
+            apiKey,
+            cx: cxKey
         }
     },
     schemas: [{
@@ -33,7 +40,8 @@ module.exports = {
     }],
     tools: { 
         search_google: async ({ query }) => {
-            const _config = module.exports.state.google;
+            const config = require('../config');
+            const _config = config.google;
             try {
                 let config_api_key = _config.apiKey;
                 let config_cx = _config.cx;

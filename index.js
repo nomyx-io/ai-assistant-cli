@@ -11,6 +11,9 @@ const args = process.argv.slice(2);
 const flags = args.filter((arg) => arg.startsWith('--'));
 const commands = args.filter((arg) => !arg.startsWith('--'));
 
+// get the application's install directory
+let appDir = path.dirname(require.main.filename);
+
 // look for the --help flag
 if (flags.includes('--help')) {
   console.log('Usage: assistant [flags] [commands]');
@@ -122,27 +125,81 @@ class AssistantRunner {
   }
 
   async runAssistant(content, onEvent = () =>{}){
+      this.startSpinner();
 
-      if(!this.assistant) {
-          if(this.uid) {
-            try {
-              this.assistant = await openai.beta.assistants.retrieve(this.uid); 
-            } catch (e) {
-              this.assistant = await AssistantRunner.createAssistantFromPersona(this.prompt, 'assistant', this.schemas);
-            }
-          } 
-          else { this.assistant = await AssistantRunner.createAssistantFromPersona(this.prompt, 'assistant', this.schemas); }
+      this.try = 0;
+      const createOrLoadAssistant = async () => {
+        try {
+          if(!this.assistant) {
+            if(this.uid) {
+              try {
+                this.assistant = await openai.beta.assistants.retrieve(this.uid); 
+              } catch (e) {
+                this.assistant = await AssistantRunner.createAssistantFromPersona(this.prompt, 'assistant', this.schemas);
+              }
+            } 
+            else { this.assistant = await AssistantRunner.createAssistantFromPersona(this.prompt, 'assistant', this.schemas); }
+        }
+        this.id = this.assistant.id;
+        } catch (e) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          if(this.try<3) {
+            console.log('retrying createOrLoadAssistant...');
+            await createOrLoadAssistant();
+            this.try++;
+          }
+        }
       }
-      this.id = this.assistant.id;
+      await createOrLoadAssistant();
       
       // create a new thread with the assistant
-      this.thread = this.thread ? this.thread : await this.openai.beta.threads.create();
+      // this.thread = this.thread ? this.thread : await this.openai.beta.threads.create();
+      this.try = 0;
+      const useOrCreateThread = async () => {
+        try {
+          this.thread = this.thread ? this.thread : await this.openai.beta.threads.create();
+        } catch (e) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          if(this.try<3) {
+            console.log('retrying useOrCreateThread...');
+            await useOrCreateThread();
+            this.try++;
+          }
+        }
+      }
+      await useOrCreateThread();
 
       // create a new message and add it to the thread
-      await this.openai.beta.threads.messages.create(this.thread.id, { role: "user", content });
+      this.try = 0;
+      const createMessage = async () => {
+        try {
+          await this.openai.beta.threads.messages.create(this.thread.id, { role: "user", content });
+        } catch (e) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          if(this.try<3) {
+            console.log('retrying createMessage...');
+            await createMessage();
+            this.try++;
+          }
+        }
+      }
+      await createMessage();
 
-      // create a new run with the assistant
-      this.run = await this.openai.beta.threads.runs.create(this.thread.id, { assistant_id: this.assistant.id });
+      this.try = 0;
+      const createRun = async () => {
+        try {
+          this.run = await this.openai.beta.threads.runs.create(this.thread.id, { assistant_id: this.assistant.id });
+        } catch (e) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          if(this.try<3) {
+            console.log('retrying createRun...');
+            await createRun();
+            this.try++;
+          }
+        }
+      }
+      await createRun();
+
       this.status = 'starting';
       this.latestMessage = '';
 
@@ -151,8 +208,20 @@ class AssistantRunner {
 
           onEvent('assistant-loop', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id });
 
-          // we retrieve the latest state of the run
-          this.run = await this.openai.beta.threads.runs.retrieve(this.thread.id, this.run.id);
+          this.try = 0;
+          const retrieveRun = async () => {
+            try {
+              this.run = await this.openai.beta.threads.runs.retrieve(this.thread.id, this.run.id);
+            } catch (e) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              if(this.try<3) {
+                console.log('retrying retrieveRun...');
+                await retrieveRun();
+                this.try++;
+              }
+            }
+          }
+          await retrieveRun();
 
           // if the run has failed, we set the latest message to the error message
           if (this.run.status === "failed") {
@@ -182,7 +251,7 @@ class AssistantRunner {
           // if the run is queued or in progress, we wait for the run to complete
           else if (this.run.status === "queued" || this.run.status === "in_progress") {
               while (this.run.status === "queued" || this.run.status === "in_progress") {
-                  this.run = await this.openai.beta.threads.runs.retrieve(this.thread.id, this.run.id);
+                  await retrieveRun();
                   await new Promise(resolve => setTimeout(resolve, 1000));
               }
               onEvent('assistant-in-progress', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id });
@@ -200,10 +269,18 @@ class AssistantRunner {
 
           // we wait one second before looping again
           await new Promise(resolve => setTimeout(resolve, 1000));
-          return await loop();
-
+          return loop();
       }
-      return await loop();
+      const response = await loop();
+      try {
+        const json = JSON.parse(response);
+        for (const key in json) {
+            this.state[key] = json[key];
+            console.log(`${key}: ${json[key]}`);
+        }
+      } catch (e) {
+          console.log('parse error',response);
+      }
   }
 
   // execute the tools
@@ -275,10 +352,24 @@ class AssistantRunner {
 
   // get the latest message in the thread
   async getLatestMessage() {
-      if (this.thread) {
+    const _getLatestMessage = async () => {
+      try {
+        if (this.thread) {
           const messages = await this.openai.beta.threads.messages.list(this.thread.id);
           return messages.data[messages.data.length - 1].content;
+        }
+      } catch (error) {
+        if(this.try<3) {
+          console.log('retrying getLatestMessage...');
+          await _getLatestMessage();
+          this.try++;
+        } else {
+          console.error(`Error getting latest message: ${error.message}`);
+          return '';
+        }
       }
+    }
+    return await _getLatestMessage();
   }
 }
 
@@ -286,87 +377,118 @@ class AssistantRunner {
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, dangerouslyAllowBrowser: true });
 
 const developerToolbox = {
-    prompt: `INSTRUCTIONS: Implement the given requirements.
+    prompt: `INSTRUCTIONS: Transform the contents of the current working folder so that it meets the requirements.
 
-Read the input JSON object's requirements field.
-Your current working folder is: ${process.cwd()}
+    You can GET and SET the state of any variable using the getset_state function. (You can also getset_states to getset multiple states at once)
+      When you see a GET, call getset_state("variable") to get the value of the state.
+      When you see a SET, call getset_state("variable", <value>) to set the value of the state.
+    
+    Your current working folder is: ${process.cwd()}
+    
+    IMPORTANT VARIABLES:
+    - requirements: The requirements (input)
+    - percent_complete: The percent complete (output)
+    - status: The status (output)
+    - tasks: The tasks to perform (input, output)
+    - current_task: The current task (input, output)
+    - ai_notes: The current AI notes (input, output)
+    - user_chat: The current user chat
+    - show_file: Set to the file you want to see on the next iteration
+    
+    
+    GET user_chat to get the user's chat messages.
+    
+      IF there are any messages,
+        FOR EACH message in user_chat,
+          ECHO a response to each message
+        END FOR
+        perform adjustments to the requirements based on messages
+          GET requirements to read the requirements
+          adjust the requirements based on the messages
+            SET requirements to the new requirements
+        SET current_task to 'decompose requirements'
+        EXIT
+    
+    GET requirements to get the existing requirements.
+    
+      IF the requirements have changed
+    
+        IF the new requirements can be performed in one session
+    
+          DO THE WORK: Use the tools at your disposal to help you.
+            * Execute tasks required to meet the new requirements within this iteration. *
+    
+          SET percent_complete to 100
+          SET status to complete
+          ECHO status to the user
+          EXIT
+      
+        ELSE
+          SET requirements to the new requirements
+          SET percent complete to 0
+          SET current_task to 'decompose requirements'
+          ECHO a status to the user
+          EXIT
+    
+      ELSE start working on the current task.
+    
+        IF GET current_task == 'decompose requirements'
+    
+          Decompose the requirements into actionable tasks
+          SET tasks to the decomposed tasks
+          SET current_task to the first task
+          SET percent_complete to 2
+          ECHO a status to the user
+          EXIT
+    
+        ELSE
+    
+          work on the current task
+            SET status to 'working'
+            
+            DO THE WORK: Move the task forward using the tools at your disposal.
+            MAKE A TOOL: If you need a tool that doesn't exist, create it.
+            BE CREATIVE: Use your creativity to solve the problem.
+            
+            SET percent_complete to update the percent complete
+            SET ai_notes to notes and comments for continuity
+    
+            IF the task is completed,
+    
+              CALL tasks_advance to move to the next task
 
-CALL user_chat_get to get the user's chat messages.
-
-  IF there are any messages,
-    FOR EACH message in messages,
-      ECHO a response to each message
-    END FOR
-    perform adjustments to the requirements based on messages
-    CALL requirements_getset to update the requirements
-    CALL task_set_current to 'decompose requirements'
-    EXIT
-
-CALL requirements_getset to get the existing requirements.
-
-  IF the requirements have changed
-
-    IF the new requirements can be performed in one session
-
-      DO THE WORK: Use the tools at your disposal to help you.
-        * Execute tasks required to meet the new requirements within this iteration. *
-
-      CALL percent_complete_getset to update the percent complete to 100
-      CALL status_getset to set the status to 'complete'
-      ECHO a status to the user
-      EXIT
+              IF there is a next task,
+                EXIT
+              ELSE
+                SET status to 'complete'
+                ECHO a status to the user
+                EXIT
   
-    ELSE
-      CALL requirements_getset to update with the new requirements
-      CALL percent_complete_getset to reset the percent complete to 0
-      CALL current_task_getset to 'decompose requirements'
-      ECHO a status to the user
+    ON ERROR:
+      SET status to 'error'
+      CALL error to log the FULL TECHNICAL DETAILS of the error message
       EXIT
+    
+    ON WARNING:
+      SET status to 'warning'
+      CALL warn to log the warning message
 
-  ELSE start working on the current task.
-
-    IF current_task_getset == 'decompose requirements'
-
-      Decompose the requirements into actionable tasks
-      CALL tasks_getset to set these tasks. This automatically sets the current task to the first task.
-      CALL percent_complete_getset to 2
-      ECHO a status to the user
-      EXIT
-
-    ELSE
-
-      work on the current task
-        CALL status_getset to set the status to 'working'
-        DO THE WORK: Progress the task forward using available tools.
-        CALL percent_complete_getset to update the percent complete
-        CALL ai_notes_getset to set notes and comments for continuity
-
-        IF the task is completed,
-
-          CALL tasks_advance to move to the next task
-
-            IF there is a next task,
-              EXIT
-            ELSE
-              CALL status_getset to set the status to 'complete'
-              ECHO a status to the user
-              EXIT
-
-ON ERROR:
-  CALL status_getset to set the status to 'error'
-  CALL error to log the FULL TECHNICAL DETAILS of the error message
-  EXIT
-
-ON WARNING:
-  CALL status_getset to set the status to 'warning'
-  CALL warn to log the warning message
-
-ALWAYS:
-  OUTPUT: ECHO COMPLETION to the user
-  DECOMPOSE TASKS INTO DIRECT, ACTIONABLE STEPS: Provide clear, sequential instructions.
-  USE THE TOOLS: Use the tools at your disposal to help you.
-  BE RESOURCEFUL: Use all available resources to solve the problem.
-  MAKE NEW TOOLS: If you need a tool that doesn't exist, create it.
+    ON EVERY RESPONSE:
+      RESPOND with a JSON object WITH NO SURROUNDING CODEBLOCKS with the following fields:
+        requirements: The new requirements
+        percent_complete: The new percent complete
+        status: The new status
+        tasks: The new tasks
+        current_task: The new current task
+        ai_notes: The new AI notes
+        user_chat: The new user chat
+    
+    ALWAYS:
+      OUTPUT: ECHO COMPLETION to the user
+      DECOMPOSE TASKS INTO DIRECT, ACTIONABLE STEPS. No 'research' or 'browser testing' tasks. Each task should be a direct action.
+      USE THE TOOLS: Use the tools at your disposal to help you.
+      BE RESOURCEFUL: Use all available resources to solve the problem.
+      MAKE NEW TOOLS: If you need a tool that doesn't exist, create it.
 `,
     state: {
         requirements: 'no requirements set',
@@ -377,16 +499,11 @@ ALWAYS:
         ai_notes: 'no AI notes.',
     },
     tools: {
-        requirements_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.requirements; else { developerToolbox.state.requirements = value; return developerToolbox.state.requirements } },
-        percent_complete_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.percent_complete; else { developerToolbox.state.percent_complete = value; return developerToolbox.state.percent_complete } },
-        status_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.status; else {  developerToolbox.state.status = value; return developerToolbox.state.status } },
-        ai_notes_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.ai_notes; else { developerToolbox.state.ai_notes = value; return developerToolbox.state.ai_notes } },
-        tasks_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.tasks; else { developerToolbox.state.tasks = value.trim().split('\n'); developerToolbox.state.current_task = developerToolbox.state.tasks[0]; console.log('tasks set to:' + value + ', current task set to ' + developerToolbox.state.tasks[0]); return developerToolbox.state.tasks } },
-        current_task_getset: function ({ value }) { if(value === undefined) return developerToolbox.state.current_task; else { developerToolbox.state.current_task = value; console.log('current task set to:' + value); return developerToolbox.state.current_task } },
+        getset_state: function ({ name, value }, state) { if (value === undefined) delete state[name]; else { state[name] = value; } return JSON.stringify(state[name]) },
+        getset_states: function ({ values }, state) { for (const { name, value } in values) { state[name] = value }; return JSON.stringify(state) },
         tasks_advance: function (_) { developerToolbox.state.tasks.shift(); developerToolbox.state.current_task = developerToolbox.state.tasks[0]; console.log('task advanced to:' + developerToolbox.state.current_task); console.log(developerToolbox.state.current_task); return developerToolbox.state.current_task },
         error: function ({message}) { console.error(message); return message },
         log: function ({message}) { console.log(message); return message },
-        user_chat_get: function (_) { const uc = developerToolbox.state.user_chat; return (uc && uc.length > 0) ? JSON.stringify(uc) : 'no chat messages' },
         generate_tool: async function ({ requirements }, assistantRef) {
           toolmakerToolbox.toolmakerRun = new AssistantRunner(openai, toolmakerToolbox, 'toolmaker');
           toolmakerToolbox.toolmaker = toolmakerToolbox.toolmakerRun;
@@ -405,13 +522,8 @@ ALWAYS:
         },
     },
     schemas: [
-        { type: 'function', function: { name: 'requirements_getset', description: 'Get or set the requirements field. Call with no parameters to get the field. Call with a value to set the field.', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The new requirements' } }, required: [] } } },
-        { type: 'function', function: { name: 'percent_complete_getset', description: 'Get or set the percent complete field. Call with no parameters to get the value.', parameters: { type: 'object', properties: { value: { type: 'number', description: 'The percent complete' } }, required: [] } } },
-        { type: 'function', function: { name: 'ai_notes_getset', description: 'Get or set the AI notes. Call with no parameter to get the notes.', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The new AI notes' } }, required: [] } } },
-        { type: 'function', function: { name: 'user_chat_get', description: 'Get chat messages from the user' } },
-        { type: 'function', function: { name: 'status_getset', description: 'Get or set the status. Call with no parameters to get the status', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The new status' } }, required: [] } } },
-        { type: 'function', function: { name: 'tasks_getset', description: 'Get or set the tasks. Call with no parameter to get thet tasks', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The list of tasks, newline-delimited' } }, required: [] } } },
-        { type: 'function', function: { name: 'current_task_getset', description: 'Get or set the current task. Call with no pparameters to get the current task.', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The current task' } }, required: ['value'] } } },
+        { type: 'function', function: { name: 'getset_state', description: 'Get or set a named variable\'s value. Call with no value to get the current value. Call with a value to set the variable. Call with null to delete it.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'The variable\'s name. required' }, value: { type: 'string', description: 'The variable\'s new value. If not present, the function will return the current value' } }, required: ['name'] } } },
+        { type: 'function', function: { name: 'getset_states', description: 'Get or set the values of multiple named variables. Call with no values to get the current values. Call with values to set the variables. Call with null to delete them.', parameters: { type: 'object', properties: { values: { type: 'object', description: 'The variables to get or set', properties: { name: { type: 'string', description: 'The variable\'s name' }, value: { type: 'string', description: 'The variable\'s new value. If not present, the function will return the current value' } }, required: ['name'] } }, required: ['values'] } } },
         { type: 'function', function: { name: 'tasks_advance', description: 'Advance the task to the next task' } },
         { type: 'function', function: { name: 'error', description: 'Log an error', parameters: { type: 'object', properties: { message: { type: 'string', description: 'The error message' } }, required: ['message'] } } },
         { type: 'function', function: { name: 'log', description: 'Log a log', parameters: { type: 'object', properties: { message: { type: 'string', description: 'The error message' } }, required: ['message'] } } },
@@ -558,6 +670,7 @@ class CommandProcessor {
 
         const result = await this.assistantRun.runAssistant(prompt, (event, data) => {
         })
+
         this.state.status = 'idle';
         this.rl.prompt();
         return result;
@@ -568,27 +681,33 @@ class CommandProcessor {
           this.rl.prompt();
           return
         }
+        // read all the contents of the ./tools folder
         this.assistantRun = new AssistantRunner(openai,  developerToolbox, 'assistant');
         let lastEvent = '';
         const loop = async () => {
           const ret = await this.assistantRun.runAssistant(JSON.stringify({
             requirements: command,
-            current_task: developerToolbox.state.current_task || '',
-            percent_complete: developerToolbox.state.percent_complete,
-            ai_notes: developerToolbox.state.ai_notes 
+            current_task: this.state.current_task || '',
+            percent_complete: this.state.percent_complete,
+            ai_notes: this.state.ai_notes 
           }), (event, data) => {
             if(lastEvent === event) return;
             lastEvent = event;
-            console.log('assistant', event);
+            if(event === 'exec-tool') {
+              const toolCall = data.toolCall;
+              const toolResult = data.result;
+              console.log(`${toolCall.function.name}(${toolCall.function.arguments})`);
+              console.log(toolResult);
+            }
           })
           console.log(ret);
-          if (developerToolbox.state.complete || developerToolbox.state.percent_complete === 100) {
+          if (this.state.complete || this.state.percent_complete === 100) {
             return ret;
           } else {
-            console.log(`Percent Complete: ${developerToolbox.state.percent_complete}`);
-            console.log('Current Task: ' + developerToolbox.state.current_task);
-            console.log('User Chat: ' + developerToolbox.state.user_chat);
-            console.log('AI Notes: ' + developerToolbox.state.ai_notes);
+            console.log(`Percent Complete: ${this.state.percent_complete}`);
+            console.log('Current Task: ' + this.state.current_task);
+            console.log('User Chat: ' + this.state.user_chat);
+            console.log('AI Notes: ' + this.state.ai_notes);
             return loop();
           }
         }
@@ -608,10 +727,17 @@ class CommandProcessor {
     });
 
     // check for a ./tools directory
-    if (fs.existsSync(path.join(process.cwd(), 'tools'))) {
-      const files = fs.readdirSync(path.join(process.cwd(), 'tools'));
+    // if the appDir ends with a bin directory, we need to go up one more level
+    const appDirParts = appDir.split(path.sep);
+    if (appDirParts[appDirParts.length - 1] === 'bin') {
+      appDirParts.pop();
+      appDir = appDirParts.join(path.sep);
+    }
+    const toolsFolder = path.join(appDir, 'tools')
+    if (fs.existsSync(toolsFolder)) {
+      const files = fs.readdirSync(toolsFolder);
       files.forEach((file) => {
-        const tool = require(path.join(process.cwd(), 'tools', file));
+        const tool = require(path.join(appDir, 'tools', file));
         developerToolbox.tools = { ...developerToolbox.tools, ...tool.tools };
         developerToolbox.schemas = [ ...developerToolbox.schemas, ...tool.schemas ];
         developerToolbox.state = { ...developerToolbox.state, ...tool.state };
@@ -621,7 +747,7 @@ class CommandProcessor {
       });
     } else {
       // create the ./tools directory
-      fs.mkdirSync(path.join(process.cwd(), 'tools'));
+      fs.mkdirSync(path.join(appDir, 'tools'));
     }
     this.getCommandHandler = this.getCommandHandler.bind(this);
     this.initAssistant = this.initAssistant.bind(this);
@@ -632,6 +758,7 @@ class CommandProcessor {
     this.initAssistant().then(() => {
       this.initializeReadline();
       this.startQueueMonitor();
+      console.log('ready');
       //setTimeout(()=> this.queue.push(() => this.getCommandHandler('greet')()), 1000);
     })
   }
@@ -667,12 +794,40 @@ class CommandProcessor {
   }
 
   async initAssistant() {
-    const assistants = (await openai.beta.assistants.list()).data
-    const rlAssistants = assistants.filter((assistant) => assistant.name === 'executor');
-    const toolmakerAssistants = assistants.filter((assistant) => assistant.name === 'toolmaker');
-    const toDelete = [...rlAssistants, ...toolmakerAssistants];
-    await Promise.all(toDelete.map((assistant) => openai.beta.assistants.del(assistant.id)));
-    this.assistant = await AssistantRunner.createAssistantFromPersona(developerToolbox.prompt, 'assistant', developerToolbox.schemas);
+    this.try = 0;
+    const cleanup = async () => {
+      try {
+        const assistants = (await openai.beta.assistants.list()).data
+        const rlAssistants = assistants.filter((assistant) => assistant.name === 'assistant');
+        const toolmakerAssistants = assistants.filter((assistant) => assistant.name === 'toolmaker');
+        const toDelete = [...rlAssistants, ...toolmakerAssistants];
+        if (toDelete.length > 0)
+          await Promise.all(toDelete.map((assistant) => openai.beta.assistants.del(assistant.id)));
+      } catch (error) {
+        // wait 1 second
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        // try again
+        if(this.try<3) {
+          console.log('retrying cleanup...');
+          await cleanup();
+          this.try++;
+        }
+      }
+    }
+    await cleanup();
+    this.try = 0;
+    const createAssistant = async () => {
+      try {
+        this.assistant = AssistantRunner.createAssistantFromPersona(developerToolbox.prompt, 'assistant', developerToolbox.schemas);
+      } catch (error) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        if(this.try<3) {
+          console.log('retrying createAssistant...');
+          await createAssistant();
+          this.try++;
+        }
+      }
+    }
   }
 
   initializeReadline() {

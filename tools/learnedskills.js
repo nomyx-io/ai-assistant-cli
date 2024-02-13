@@ -15,51 +15,11 @@ module.exports = {
             version: '0.0.1',
         }],
     },
-    schemas: [{
-        type: 'function',
-        function: {
-            name: 'learned_skills_list',
-            description: 'list all the learned skills that you have',
-            parameters: {
-            }
-        },
-    },{
-        type: 'function',
-        function: {
-            name: 'learned_skill_details',
-            description: 'get the details of how to perform a learned skill',
-            parameters: {
-                type: 'object',
-                properties: {
-                    skill: {
-                        type: 'string',
-                        description: 'The name of the skill to get'
-                    }
-                },
-                required: ['skill']
-            }
-        },
-    },{
-        type: 'function',
-        function: {
-            name: 'learned_skill_save_details',
-            description: 'save the details of how to perform a learned skill',
-            parameters: {
-                type: 'object',
-                properties: {
-                    skill: {
-                        type: 'string',
-                        description: 'The name of the skill to get'
-                    },
-                    skillDetail: {
-                        type: 'string',
-                        description: 'The details of the skill'
-                    }
-                },
-                required: ['skill', 'skillDetail']
-            }
-        },
-    }],
+    schemas: [
+        {"type": "function", "function": {"name": "learned_skills_list", "description": "list all the learned skills that you have", "parameters": {}}},
+        {"type": "function", "function": {"name": "learned_skill_details", "description": "get the details of how to perform a learned skill", "parameters": {"type": "object", "properties": {"skill": {"type": "string", "description": "The name of the skill to get"}}, "required": ["skill"]}}},
+        {"type": "function", "function": {"name": "learned_skill_save_details", "description": "save the details of how to perform a learned skill", "parameters": {"type": "object", "properties": {"skill": {"type": "string", "description": "The name of the skill to get"}, "skillDetail": {"type": "string", "description": "The details of the skill"}}, "required": ["skill", "skillDetail"]}}}
+    ],
     tools: {
         learned_skills_list: async () => {
             try {
