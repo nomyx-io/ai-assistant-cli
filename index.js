@@ -30,18 +30,36 @@ if (flags.includes('--help')) {
 }
 
 class AssistantRunner {
-  commandProcessor
-  assistant
-  openai
   thread
   run
   status
   latestMessage
-  cancelRequested
   toolCalls
   toolOutputs
-  tools
-  schemas
+  assistant
+  id
+  uid
+  state
+  constructor(
+    openai, 
+    toolbox,
+    uid = undefined) {
+        this.openai = openai;
+        this.thread = undefined;
+        this.run = undefined;
+        this.status = 'idle';
+        this.latestMessage = '';
+        this.toolCalls = [];
+        this.toolOutputs = [];
+        this.prompt = toolbox.prompt;
+        this.tools = toolbox.tools;
+        this.schemas = toolbox.schemas;
+        this.assistant = undefined;
+        this.id = '';
+        this.uid = uid || '';
+        this.state = {};
+        this.runAssistant = this.runAssistant.bind(this);
+    }
   spinState = {
     frames: [
       "🌑 ",
@@ -82,175 +100,188 @@ class AssistantRunner {
       process.stdout.write('\n'); // Move the cursor to the next line
     }
   }
-  constructor(openai, assistant, tools, schemas) {
-    this.openai = openai;
-    this.thread = undefined;
-    this.run = undefined;
-    this.assistant = assistant;
-    this.status = 'idle';
-    this.latestMessage = '';
-    this.cancelRequested = false;
-    this.toolCalls = [];
-    this.toolOutputs = [];
-    this.tools = tools;
-    this.schemas = schemas;
+  destroy() {
+      if (this.run && this.thread) {
+          this.openai.beta.threads.runs.cancel(this.thread.id, this.run.id);
+      }
+      this.openai.beta.assistants.del(this.assistant.id);
   }
 
   chat(content) {
-    this.assistant.state.user_chat = this.assistant.state.user_chat || [];
-    this.assistant.state.user_chat.push(content);
+      this.state.user_chat = this.state.user_chat || [];
+      this.state.user_chat.push(content);
   }
 
   static async createAssistantFromPersona(persona, name, schemas) {
-    return openai.beta.assistants.create(
-      {
-        instructions: persona,
-        name,
-        tools: Object.keys(schemas).map((schemaName) => schemas[schemaName]),
-        model: 'gpt-4-turbo-preview'
-      }
-    );
+      return openai.beta.assistants.create({
+          instructions: persona,
+          name,
+          tools: Object.keys(schemas).map((schemaName) => schemas[schemaName]),
+          model: 'gpt-4-turbo-preview'
+      });
   }
 
-  async runAssistant(content) {
+  async runAssistant(content, onEvent = () =>{}){
 
-    // create a new thread with the assistant
-    this.thread = this.thread ? this.thread : await this.openai.beta.threads.create();
-
-    // create a new message and add it to the thread
-    await this.openai.beta.threads.messages.create(this.thread.id, { role: "user", content });
-
-    // create a new run with the assistant
-    this.run = await this.openai.beta.threads.runs.create(this.thread.id, { assistant_id: this.assistant.id });
-    this.status = 'starting';
-    this.latestMessage = '';
-    this.startSpinner();
-    
-    const loop = async () => {
-
-      // we retrieve the latest state of the run
-      this.run = await this.openai.beta.threads.runs.retrieve(this.thread.id, this.run.id);
-
-      // if the run has failed, we set the latest message to the error message
-      if (this.run.status === "failed") {
-        // if we are rate-limited, we wait for the limit time and try again
-        if (await this.waitIfRateLimited()) return loop();
-        // else we set the latest message to the error message
-        this.latestMessage = 'failed run: ' + this.run.last_error || await this.latestMessage || '\n';
-        this.stopSpinner();
-        return this.latestMessage;
+      if(!this.assistant) {
+          if(this.uid) {
+            try {
+              this.assistant = await openai.beta.assistants.retrieve(this.uid); 
+            } catch (e) {
+              this.assistant = await AssistantRunner.createAssistantFromPersona(this.prompt, 'assistant', this.schemas);
+            }
+          } 
+          else { this.assistant = await AssistantRunner.createAssistantFromPersona(this.prompt, 'assistant', this.schemas); }
       }
+      this.id = this.assistant.id;
+      
+      // create a new thread with the assistant
+      this.thread = this.thread ? this.thread : await this.openai.beta.threads.create();
 
-      // if the run is cancelled, we set the latest message to 'cancelled run'
-      else if (this.run.status === "cancelled") {
-        this.latestMessage = 'cancelled run';
-        this.stopSpinner();
-        return this.latestMessage;
-      }
+      // create a new message and add it to the thread
+      await this.openai.beta.threads.messages.create(this.thread.id, { role: "user", content });
 
-      // if the run is completed, we set the latest message to the last message in the thread
-      else if (this.run.status === "completed") {
-        this.latestMessage = await this.getLatestMessage() || '\n';
-        this.status = 'idle';
-        this.stopSpinner();
-        // return the latest message
-        return this.latestMessage;
-      }
+      // create a new run with the assistant
+      this.run = await this.openai.beta.threads.runs.create(this.thread.id, { assistant_id: this.assistant.id });
+      this.status = 'starting';
+      this.latestMessage = '';
 
-      // if the run is queued or in progress, we wait for the run to complete
-      else if (this.run.status === "queued" || this.run.status === "in_progress") {
-        while (this.run.status === "queued" || this.run.status === "in_progress") {
+      onEvent('assistant-started', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id });
+      const loop = async () => {
+
+          onEvent('assistant-loop', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id });
+
+          // we retrieve the latest state of the run
           this.run = await this.openai.beta.threads.runs.retrieve(this.thread.id, this.run.id);
+
+          // if the run has failed, we set the latest message to the error message
+          if (this.run.status === "failed") {
+              // if we are rate-limited, we wait for the limit time and try again
+              if (await this.waitIfRateLimited(onEvent)) return loop();
+              // else we set the latest message to the error message
+              this.latestMessage = 'failed run: ' + this.run.last_error || this.latestMessage || '\n';
+              onEvent('assistant-failed', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, message: this.latestMessage });
+              return this.latestMessage;
+          }
+
+          // if the run is cancelled, we set the latest message to 'cancelled run'
+          else if (this.run.status === "cancelled") {
+              this.latestMessage = 'cancelled run';
+              onEvent('assistant-cancelled', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id });
+              return this.latestMessage;
+          }
+
+          // if the run is completed, we set the latest message to the last message in the thread
+          else if (this.run.status === "completed") {
+              this.latestMessage = await this.getLatestMessage() || '\n';
+              this.status = 'idle';
+              onEvent('assistant-completed', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, message: this.latestMessage });
+              return this.latestMessage;
+          }
+
+          // if the run is queued or in progress, we wait for the run to complete
+          else if (this.run.status === "queued" || this.run.status === "in_progress") {
+              while (this.run.status === "queued" || this.run.status === "in_progress") {
+                  this.run = await this.openai.beta.threads.runs.retrieve(this.thread.id, this.run.id);
+                  await new Promise(resolve => setTimeout(resolve, 1000));
+              }
+              onEvent('assistant-in-progress', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id });
+          }
+
+          // if the run requires action, we execute the tools and submit the outputs
+          else if (this.run.status === "requires_action") {
+              this.toolCalls = this.run.required_action.submit_tool_outputs.tool_calls;
+              this.toolOutputs = await this.execTools(this.toolCalls, this.tools, onEvent, this.state);
+              onEvent('exec-tools', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, toolCalls: this.toolCalls, toolOutputs: this.toolOutputs});
+              await openai.beta.threads.runs.submitToolOutputs(this.thread.id, this.run.id, { tool_outputs: this.toolOutputs });
+          }
+
+          onEvent('assistant-loop-end', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id });
+
+          // we wait one second before looping again
           await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
+          return await loop();
 
-      // if the run requires action, we execute the tools and submit the outputs
-      else if (this.run.status === "requires_action") {
-        this.toolCalls = this.run.required_action.submit_tool_outputs.tool_calls;
-        this.toolOutputs = await this.execTools(this.toolCalls, this.tools);
-        await openai.beta.threads.runs.submitToolOutputs(this.thread.id, this.run.id, { tool_outputs: this.toolOutputs });
       }
-
-      // if a cancellation was requested, we cancel the run and set the latest message to 'cancelled run'
-      if (this.cancelRequested && this.run && this.thread) {
-        this.latestMessage = 'cancelled run';
-        this.stopSpinner();
-        return this.latestMessage;
-      }
-
-      // we wait one second before looping again
-      await new Promise(resolve => setTimeout(resolve, 1000));
       return await loop();
-
-    }
-    return await loop();
   }
 
   // execute the tools
-  async execTools(toolCalls, availableFunctions) {
-    let toolOutputs = [];
-    for (const toolCall of toolCalls) {
-      try {
-        let func = availableFunctions[toolCall.function.name];
-        if (!func) {
-          throw new Error(`Function ${toolCall.function.name} is not available.`);
-        }
-        const _arguments = JSON.parse(toolCall.function.arguments || '{}');
-        let result = await func(_arguments, this);
-        // if the result is not a string, we stringify it
-        if (typeof result !== 'string') {
-          result = JSON.stringify(result);
-        }
-        // if there's still no result, we set it to an empty string
-        if (!result) {
-          console.log(`No return value for ${toolCall.function.name}`)
-          result = `No return value for ${toolCall.function.name}`;
-        }
-        toolOutputs.push({
-          tool_call_id: toolCall.id,
-          output: result
-        });
-      } catch (e) {
-        toolOutputs.push({
-          tool_call_id: toolCall.id,
-          output: 'error: ' + e.message
-        });
+  async execTools(toolCalls, availableFunctions, onEvent, state) {
+      let toolOutputs = [];
+      for (const toolCall of toolCalls) {
+          try {
+              let func = availableFunctions[toolCall.function.name];
+              if (!func) {
+                onEvent('exec-tool-error', { toolCallId: toolCall.id, toolCall: toolCall, message: `Function ${toolCall.function.name} is not available.` });
+                throw new Error(`Function ${toolCall.function.name} is not available.`);
+              }
+              const _arguments = JSON.parse(toolCall.function.arguments || '{}');
+              if(state.update_callback) {
+                  state.update_callback(`${toolCall.function.name} (${toolCall.function.arguments})`);
+              }
+              let result = await func(_arguments, state);
+              onEvent('exec-tool', { toolCallId: toolCall.id, toolCall: toolCall, result: result });
+
+              // if the function has an update callback, we call it
+              if(state.update_callback) {
+                  state.update_callback(result);
+              }
+
+              // if the result is not a string, we stringify it
+              if (typeof result !== 'string') {
+                  result = JSON.stringify(result);
+              }
+              // if there's still no result, we set it to an empty string
+              if (!result) {
+                  console.log(`No return value for ${toolCall.function.name}`)
+                  result = `No return value for ${toolCall.function.name}`;
+              }
+              toolOutputs.push({
+                  tool_call_id: toolCall.id,
+                  output: result
+              });
+          } catch (e) {
+              toolOutputs.push({
+                  tool_call_id: toolCall.id,
+                  output: 'error: ' + e.message
+              });
+          }
       }
-    }
-    return toolOutputs;
+      return toolOutputs;
   }
 
   // wait for the rate limit to be lifted
-  async waitIfRateLimited() {
-    if (this.run.last_error.includes('rate limit exceeded')) {
-      const waitTime = (parseInt(this.run.last_error.match(/(\d+)m(\d+)/)[1])
-        * 60 + parseInt(this.run.last_error.match(/(\d+)m(\d+)/)[2]) + 1) * 1000;
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-      return true;
-    } else return false;
+  async waitIfRateLimited(onEvent) {
+      if (this.run.last_error.includes('rate limit exceeded')) {
+          const waitTime = (parseInt(this.run.last_error.match(/(\d+)m(\d+)/)[1])
+              * 60 + parseInt(this.run.last_error.match(/(\d+)m(\d+)/)[2]) + 1) * 1000;
+          onEvent('rate-limited', { waitTime });
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          return true;
+      } else return false;
   }
 
   // request a cancellation of the run
   async requestCancel() {
-    if (this.run && this.thread) {
-      try {
-        this.cancelRequested = true;
-        await this.openai.beta.threads.runs.cancel(this.thread.id, this.run.id);
-      } catch (e) {
-        console.error('Error cancelling run:', e);
+      if (this.run && this.thread) {
+          try {
+              await this.openai.beta.threads.runs.cancel(this.thread.id, this.run.id);
+          } catch (e) {
+              console.error('Error cancelling run:', e);
+          }
       }
-    }
   }
 
   // get the latest message in the thread
   async getLatestMessage() {
-    if (this.thread) {
-      const messages = await this.openai.beta.threads.messages.list(this.thread.id);
-      return messages.data[messages.data.length - 1].content;
-    }
+      if (this.thread) {
+          const messages = await this.openai.beta.threads.messages.list(this.thread.id);
+          return messages.data[messages.data.length - 1].content;
+      }
   }
 }
+
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, dangerouslyAllowBrowser: true });
 
@@ -357,10 +388,14 @@ ALWAYS:
         log: function ({message}) { console.log(message); return message },
         user_chat_get: function (_) { const uc = developerToolbox.state.user_chat; return (uc && uc.length > 0) ? JSON.stringify(uc) : 'no chat messages' },
         generate_tool: async function ({ requirements }, assistantRef) {
-          toolmakerToolbox.toolmaker = await AssistantRunner.createAssistantFromPersona(toolmakerToolbox.prompt, 'toolmaker', toolmakerToolbox.schemas);
-          toolmakerToolbox.toolmakerRun = new AssistantRunner(openai, toolmakerToolbox.toolmaker, toolmakerToolbox.tools, toolmakerToolbox.schemas);
+          toolmakerToolbox.toolmakerRun = new AssistantRunner(openai, toolmakerToolbox, 'toolmaker');
+          toolmakerToolbox.toolmaker = toolmakerToolbox.toolmakerRun;
           const callToolmaker = async () => {
-            await toolmakerToolbox.toolmakerRun.runAssistant(requirements);
+            await toolmakerToolbox.toolmakerRun.runAssistant(requirements, (event, data) => {
+              if(toolmakerToolbox.lastEvent === event) return;
+              toolmakerToolbox.lastEvent = event;
+              console.log('toolmaker', event);
+            })
             if (toolmakerToolbox.state.complete) {
               return 'tool generated';
             }
@@ -518,10 +553,11 @@ class CommandProcessor {
         console.log(command);
       },
       'greet': async () => {
-        const prompt = 'hello, your are my assistant, and I am your user, Sebastian. Please greet me back, and tell me your name.';
-        this.assistantRun = new AssistantRunner(openai, this.assistant, developerToolbox.tools, developerToolbox.schemas);
+        const prompt = 'hello, your are my assistant, and I am your user. Please greet me back, and tell me your name.';
+        this.assistantRun = new AssistantRunner(openai, developerToolbox, 'assistant');
 
-        const result = await this.assistantRun.runAssistant(prompt);
+        const result = await this.assistantRun.runAssistant(prompt, (event, data) => {
+        })
         this.state.status = 'idle';
         this.rl.prompt();
         return result;
@@ -532,23 +568,33 @@ class CommandProcessor {
           this.rl.prompt();
           return
         }
-        this.assistantRun = new AssistantRunner(openai, this.assistant, developerToolbox.tools, developerToolbox.schemas);
+        this.assistantRun = new AssistantRunner(openai,  developerToolbox, 'assistant');
+        let lastEvent = '';
         const loop = async () => {
           const ret = await this.assistantRun.runAssistant(JSON.stringify({
             requirements: command,
             current_task: developerToolbox.state.current_task || '',
             percent_complete: developerToolbox.state.percent_complete,
-          }));
+            ai_notes: developerToolbox.state.ai_notes 
+          }), (event, data) => {
+            if(lastEvent === event) return;
+            lastEvent = event;
+            console.log('assistant', event);
+          })
+          console.log(ret);
           if (developerToolbox.state.complete || developerToolbox.state.percent_complete === 100) {
             return ret;
           } else {
             console.log(`Percent Complete: ${developerToolbox.state.percent_complete}`);
             console.log('Current Task: ' + developerToolbox.state.current_task);
+            console.log('User Chat: ' + developerToolbox.state.user_chat);
+            console.log('AI Notes: ' + developerToolbox.state.ai_notes);
             return loop();
           }
         }
         const result = await loop();
-
+        console.log(result);
+        
         this.state.status = 'idle';
         this.rl.prompt();
     
@@ -626,7 +672,7 @@ class CommandProcessor {
     const toolmakerAssistants = assistants.filter((assistant) => assistant.name === 'toolmaker');
     const toDelete = [...rlAssistants, ...toolmakerAssistants];
     await Promise.all(toDelete.map((assistant) => openai.beta.assistants.del(assistant.id)));
-    this.assistant = await AssistantRunner.createAssistantFromPersona(developerToolbox.prompt, 'assistant_' + this.config.assistantSuffix, developerToolbox.schemas);
+    this.assistant = await AssistantRunner.createAssistantFromPersona(developerToolbox.prompt, 'assistant', developerToolbox.schemas);
   }
 
   initializeReadline() {

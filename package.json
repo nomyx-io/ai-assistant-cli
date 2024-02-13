@@ -1,6 +1,6 @@
 {
   "name": "@nomyx/assistant-cli",
-  "version": "2.1.5",
+  "version": "2.1.6",
   "description": "A javascript-based assistant that can help you with your daily tasks",
   "main": "./index.js",
   "publisher": "Nomyx",
