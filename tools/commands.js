@@ -1,5 +1,7 @@
 // include all required libraries and dependencies in the tool file here
 const fs = require('fs');
+const pathModule = require('path');
+
 const { exec } = require('child_process');
 const os = require('os');
 
@@ -35,27 +37,27 @@ const toolSchema = {
   ],
   tools: {
     getsetcwd : function ({path}) { if(path) process.chdir(path); return "Current Directory: " + process.cwd(); },
-    cp: function ({source, destination}) { exec(`cp ${path.join(cwd,source)} ${path.join(cwd,destination)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    mv: function ({source, destination}) { exec(`mv ${path.join(cwd,source)} ${path.join(cwd,destination)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    rm: function ({path}) { exec(`rm -rf ${path.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    cat: function ({path}) { exec(`cat ${path.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    greg: function ({path, pattern}) { exec(`grep ${pattern} ${path.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    cp: function ({source, destination}) { exec(`cp ${pathModule.join(cwd,source)} ${pathModule.join(cwd,destination)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    mv: function ({source, destination}) { exec(`mv ${pathModule.join(cwd,source)} ${pathModule.join(cwd,destination)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    rm: function ({path}) { exec(`rm -rf ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    cat: function ({path}) { exec(`cat ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    greg: function ({path, pattern}) { exec(`grep ${pattern} ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
     curl: function ({url}) { exec(`curl ${url}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    head: function ({path, lines}) { exec(`head -n ${lines} ${path.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    stat: function ({path}) { exec(`stat ${path.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    tail: function ({path, lines}) { exec(`tail -n ${lines} ${path.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    sed: function ({path, pattern, replacement}) { exec(`sed -i 's/${pattern}/${replacement}/g' ${path.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    awk: function ({path, pattern, replacement}) { exec(`awk '{gsub(/${pattern}/${replacement}/g)}1' ${path.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    touch: function ({path}) { exec(`touch ${path.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`${stdout}${stderr}`); }); },
-    ls: function ({directory, options = ''}) { exec(`ls ${options} ${path.join(cwd,directory)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    chmod: function ({path, mode}) { exec(`chmod ${mode} ${path.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    head: function ({path, lines}) { exec(`head -n ${lines} ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    stat: function ({path}) { exec(`stat ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    tail: function ({path, lines}) { exec(`tail -n ${lines} ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    sed: function ({path, pattern, replacement}) { exec(`sed -i 's/${pattern}/${replacement}/g' ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    awk: function ({path, pattern, replacement}) { exec(`awk '{gsub(/${pattern}/${replacement}/g)}1' ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    touch: function ({path}) { exec(`touch ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`${stdout}${stderr}`); }); },
+    ls: function ({directory, options = ''}) { exec(`ls ${options} ${pathModule.join(cwd,directory)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    chmod: function ({path, mode}) { exec(`chmod ${mode} ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
     ln: function ({target, linkName}) { exec(`ln -s ${target} ${linkName}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    mkdir: function ({path, recursive = false}) { let command = recursive ? `mkdir -p ${path.join(cwd,path)}` : `mkdir ${path.join(cwd,path)}`; exec(command, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    rmdir: function ({path}) { exec(`rmdir ${path.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    rename: function ({oldPath, newPath}) { exec(`mv ${path.join(cwd,oldPath)} ${path.join(cwd,newPath)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    find: function ({directory, pattern}) { exec(`find ${path.join(cwd,directory)} -name "${pattern}"`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    mkdir: function ({path, recursive = false}) { let command = recursive ? `mkdir -p ${pathModule.join(cwd,path)}` : `mkdir ${pathModule.join(cwd,path)}`; exec(command, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    rmdir: function ({path}) { exec(`rmdir ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    rename: function ({oldPath, newPath}) { exec(`mv ${pathModule.join(cwd,oldPath)} ${pathModule.join(cwd,newPath)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
+    find: function ({directory, pattern}) { exec(`find ${pathModule.join(cwd,directory)} -name "${pattern}"`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
     call_npm_method: function ({npmlib, method, args}) { const ret = require(npmlib)[method](args); return ret ? npmlib  + ' ' + method + ' ' + args + ' called: ' + JSON.stringify(ret) : 'Error calling ' + npmlib + ' ' + method + ' ' + args; },
-    list_npm_libraries: function (_) { return JSON.stringify(fs.readdirSync(path.join(process.cwd(), 'node_modules'))); },
+    list_npm_libraries: function (_) { return JSON.stringify(fs.readdirSync(pathModule.join(process.cwd(), 'node_modules'))); },
     install_npm_library: function ({library}) { exec(`npm install ${library}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); }
   }
 }
