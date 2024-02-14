@@ -14,6 +14,30 @@ const commands = args.filter((arg) => !arg.startsWith('--'));
 // get the application's install directory
 let appDir = path.dirname(require.main.filename);
 
+function saveConfig(config) {
+  // get the application install directory
+  const appDir = path.dirname(require.main.filename);
+  fs.writeFileSync(path.join(appDir, 'config.json'), JSON.stringify(config));
+}
+
+function loadConfig() {
+  const appDir = path.dirname(require.main.filename);
+  if(fs.existsSync(path.join(appDir, 'config.json'))) {
+    return JSON.parse(fs.readFileSync(path.join(appDir, 'config.json')));
+  } else {
+    const config = {
+      apiKey: process.env.OPENAI_API_KEY,
+      playHtApiKey: process.env.PLAYHT_AUTHORIZATION,
+      playHtUserId: process.env.PLAYHT_USER_ID,
+      playHtMaleVoice: process.env.PLAYHT_MALE_VOICE,
+      playHtFemaleVoice: process.env.PLAYHT_FEMALE_VOICE
+    };
+    saveConfig(config);
+    return config;
+  }
+}
+const config = loadConfig();
+
 // look for the --help flag
 if (flags.includes('--help')) {
   console.log('Usage: assistant [flags] [commands]');
@@ -657,8 +681,16 @@ class CommandProcessor {
           this.rl.prompt();
         }
       },
-      'status': async (command) => {
-        console.log(this.state.status);
+      'state': async (command) => {
+        const state = Object.keys(this.state).map((key) => `${key}: ${this.state[key]}`).join('\n');
+        console.log(state);
+        this.rl.prompt();
+      },
+      'reset': async (command) => {
+        this.state = {};
+        this.config.assistantId = '';
+        this.config.threadId = '';
+        saveConfig(config);
         this.rl.prompt();
       },
       'echo': async (command) => {
@@ -682,7 +714,10 @@ class CommandProcessor {
           return
         }
         // read all the contents of the ./tools folder
-        this.assistantRun = new AssistantRunner(openai,  developerToolbox, 'assistant');
+        const assistantId = config.assistantId;
+        this.assistantRun = new AssistantRunner(openai,  developerToolbox, 'assistant', assistantId);
+        config.assistantId = this.assistantRun.id;
+
         let lastEvent = '';
         const loop = async () => {
           const ret = await this.assistantRun.runAssistant(JSON.stringify({
@@ -692,6 +727,10 @@ class CommandProcessor {
             ai_notes: this.state.ai_notes 
           }), (event, data) => {
             if(lastEvent === event) return;
+            if(assistant.thread.id && !config.threadId) {
+              config.threadId = assistant.thread.id;
+              saveConfig(config);
+            }
             lastEvent = event;
             if(event === 'exec-tool') {
               const toolCall = data.toolCall;
