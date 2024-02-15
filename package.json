@@ -22,6 +22,7 @@
     "axios": "^1.6.7",
     "cli-color": "^2.0.3",
     "cli-highlight": "^2.1.11",
+    "dependency-tree": "^10.0.9",
     "dotenv": "^16.4.2",
     "inquirer": "^6.0.0",
     "install": "^0.13.0",

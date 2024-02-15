@@ -9,12 +9,12 @@ const toolSchema = {
       type: 'function',
       function: {
         name: 'html_selector',
-        description: 'Performs the selector operation on the HTML page at the given path. The operation can be append, prepend, replace, remove, get_attributes, or set_attributes.',
+        description: 'Performs the selector operation on the HTML page at the given path. The operation can be get, append, prepend, replace, remove, get_attributes, or set_attributes.',
         parameters: {
           type: 'object',
           properties: {
             path: { type: 'string', description: 'The file path to the HTML file.' },
-            operation: { type: 'string', description: 'The operation to perform on the selector. Can be append, prepend, replace, remove, get_attributes, set_attributes, or summarize' },
+            operation: { type: 'string', description: 'The operation to perform on the selector. Can be get, append, prepend, replace, remove, get_attributes, set_attributes, or summarize' },
             selector: { type: 'string', description: 'The CSS selector to match elements.' },
             value: { type: 'string', description: 'The HTML content to append.' },
             n: { type: 'string', description: 'For summarize, specifies the depth of child elements to summarize. 0 for detailed information.' },
@@ -34,6 +34,11 @@ const toolSchema = {
       const elements = document.querySelectorAll(selector);
       let result = '';
       switch (operation) {
+        case 'get':
+          const content = [];
+          elements.forEach(ele => content.push(ele.innerHTML));
+          result = content;
+          break;
         case 'append':
           elements.forEach(ele => ele.innerHTML += value);
           result = 'Content appended successfully.';

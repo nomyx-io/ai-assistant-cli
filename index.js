@@ -419,8 +419,6 @@ var AssistantRun = /** @class */ (function () {
         this.commandHandler = commandHandler;
         this.eventHandler = eventHandler;
         this.usages = [];
-        this.file_contents = '';
-        this.file_name = '';
         this.toolbox = toolbox;
         this.tools = toolbox.tools;
         this.schemas = toolbox.schemas;
@@ -459,7 +457,7 @@ var AssistantRun = /** @class */ (function () {
     };
     AssistantRun.createRun = function (content, toolbox, commandHandler, eventHandler) {
         return __awaiter(this, void 0, void 0, function () {
-            var aRunObj, input_vars, fPath, file, ret, parsedResponse;
+            var aRunObj, input_vars, fPath, file, ret, parsedResponse, usageSummary;
             return __generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
@@ -476,15 +474,24 @@ var AssistantRun = /** @class */ (function () {
                         if (containsFlag('--attach') || containsFlag('-a')) {
                             fPath = path.join(process.cwd(), args[1]);
                             file = fs.readFileSync(fPath, 'utf8');
+                            // truncate the file if it's longer than 8k
+                            if (file.length > 8192) {
+                                file = file.slice(0, 8192);
+                                file += '\n\n... file truncated, use head or tail to view the rest of the file ...';
+                            }
                             input_vars.file_contents = file;
-                            input_vars.file_name = aRunObj.file_name;
                             console.log("attached file: ".concat(fPath));
                         }
                         return [4 /*yield*/, aRunObj.runAssistant(JSON.stringify(input_vars), function (event, data) {
                                 if (event === 'exec-tools') {
                                     data.toolOutputs.forEach(function (output) {
                                         var func = data.toolCalls.find(function (call) { return call.id === output.tool_call_id; }).function.name;
-                                        console.log("$ ".concat(func, " (").concat(func.arguments ? func.arguments : '', ") => ").concat(output.output));
+                                        var fout = {
+                                            function: func,
+                                            arguments: data.toolCalls.find(function (call) { return call.id === output.tool_call_id; }).function.arguments,
+                                            output: output.output
+                                        };
+                                        console.table([fout]);
                                     });
                                 }
                                 if (event == 'assistant-completed') {
@@ -508,6 +515,10 @@ var AssistantRun = /** @class */ (function () {
                             if (parsedResponse.show_file) {
                                 aRunObj.state.file_name = parsedResponse.show_file;
                                 aRunObj.state.file_contents = fs.readFileSync(parsedResponse.show_file, 'utf8');
+                                if (aRunObj.state.file_contents.length > 8192) {
+                                    aRunObj.state.file_contents = aRunObj.state.file_contents.slice(0, 8192);
+                                    aRunObj.state.file_contents += '\n\n... file truncated, use head or tail to view the rest of the file ...';
+                                }
                             }
                             else {
                                 aRunObj.state.file_name = '';
@@ -519,7 +530,20 @@ var AssistantRun = /** @class */ (function () {
                         }
                         catch (e) {
                         }
-                        if (aRunObj.state.status === 'complete' || aRunObj.state.status === 'idle' || parseInt(aRunObj.state.percent_complete) === 100) {
+                        usageSummary = aRunObj.usages.reduce(function (acc, usage) {
+                            for (var key in usage) {
+                                if (usage[key] && usage[key] !== 'null') {
+                                    acc[key] += usage[key];
+                                }
+                            }
+                            return acc;
+                        }, {
+                            prompt_tokens: 0,
+                            completion_tokens: 0,
+                            chat_tokens: 0,
+                        });
+                        if (parseInt(aRunObj.state.percent_complete) === 100) {
+                            aRunObj.usages.push(usageSummary);
                             console.table(aRunObj.usages);
                             console.table(aRunObj.state);
                             aRunObj.persist('done');
@@ -527,7 +551,15 @@ var AssistantRun = /** @class */ (function () {
                             CommandProcessor.rl.prompt();
                         }
                         else {
-                            CommandProcessor.rl.prompt();
+                            // add another run to the queue using the last state
+                            return [2 /*return*/, AssistantRun.createRun(JSON.stringify({
+                                    requirements: aRunObj.state.requirements,
+                                    current_task: aRunObj.state.current_task,
+                                    percent_complete: aRunObj.state.percent_complete,
+                                    ai_notes: aRunObj.state.ai_notes,
+                                    user_chat: aRunObj.state.user_chat,
+                                    ai_chat: aRunObj.state.ai_chat,
+                                }), toolbox, commandHandler, eventHandler)];
                         }
                         CommandProcessor.taskQueue.splice(CommandProcessor.taskQueue.indexOf(aRunObj), 1);
                         return [2 /*return*/, aRunObj];
@@ -582,7 +614,7 @@ var AssistantRun = /** @class */ (function () {
                     return __generator(this, function (_b) {
                         switch (_b.label) {
                             case 0:
-                                _b.trys.push([0, 2, , 5]);
+                                _b.trys.push([0, 2, , 6]);
                                 return [4 /*yield*/, createMessage(threadId, content)];
                             case 1:
                                 msg = _b.sent();
@@ -590,14 +622,16 @@ var AssistantRun = /** @class */ (function () {
                                 return [2 /*return*/, msg];
                             case 2:
                                 e_3 = _b.sent();
-                                runId = e_3.message.match(/run_\w+/)[0];
+                                runId = e_3.message.match(/run_\w+/);
                                 if (!runId) return [3 /*break*/, 4];
+                                runId = runId[0];
                                 return [4 /*yield*/, cancelRun(threadId, runId)];
                             case 3:
                                 _b.sent();
                                 return [2 /*return*/, createMessage(threadId, content)];
-                            case 4: return [3 /*break*/, 5];
-                            case 5: return [2 /*return*/];
+                            case 4: throw e_3;
+                            case 5: return [3 /*break*/, 6];
+                            case 6: return [2 /*return*/];
                         }
                     });
                 });
@@ -607,12 +641,11 @@ var AssistantRun = /** @class */ (function () {
             return __generator(this, function (_e) {
                 switch (_e.label) {
                     case 0:
-                        this.startSpinner();
                         // create or loaSpd the assistant
                         _b = this;
                         return [4 /*yield*/, getOrCreateAssistant(config.assistantId, {
                                 instructions: developerToolbox.prompt,
-                                name: 'assistant',
+                                name: generateUsername("", 2, 38),
                                 tools: Object.keys(this.toolbox.schemas).map(function (schemaName) { return _this.toolbox.schemas[schemaName]; }),
                                 model: 'gpt-4-turbo-preview'
                             })];
@@ -663,7 +696,7 @@ var AssistantRun = /** @class */ (function () {
                                         onEvent('assistant-loop-start', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, message: this.latestMessage });
                                         if (!(this.run.status === "failed")) return [3 /*break*/, 5];
                                         // x mark
-                                        process.stdout.write("\u2716");
+                                        process.stdout.write("\u2716\n");
                                         this.status = 'failed';
                                         return [4 /*yield*/, waitIfRateLimited(this.run)];
                                     case 4:
@@ -675,7 +708,7 @@ var AssistantRun = /** @class */ (function () {
                                     case 5:
                                         if (!(this.run.status === "cancelled")) return [3 /*break*/, 6];
                                         // cancel mark
-                                        process.stdout.write("\u2716");
+                                        process.stdout.write("\u2716\n");
                                         this.status = 'cancelled';
                                         this.latestMessage = 'cancelled run';
                                         onEvent('assistant-cancelled', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id });
@@ -683,7 +716,7 @@ var AssistantRun = /** @class */ (function () {
                                     case 6:
                                         if (!(this.run.status === "completed")) return [3 /*break*/, 9];
                                         // check mark
-                                        process.stdout.write("\u2714");
+                                        process.stdout.write("\u2714\n");
                                         this.status = 'completed';
                                         _d = this;
                                         return [4 /*yield*/, listRunSteps(this.thread.id, this.run.id)];
@@ -751,10 +784,6 @@ var AssistantRun = /** @class */ (function () {
                             for (key in json) {
                                 this.state[key] = json[key];
                             }
-                            if (this.state.show_file) {
-                                this.file_name = this.state.show_file;
-                                this.file_contents = fs.readFileSync(this.state.show_file, 'utf8');
-                            }
                             if (this.state.ai_chat) {
                                 console.log(this.state.ai_chat);
                             }
@@ -768,7 +797,6 @@ var AssistantRun = /** @class */ (function () {
                         catch (e) {
                             console.log('parse error', response);
                         }
-                        this.stopSpinner();
                         return [2 /*return*/, response];
                 }
             });
@@ -908,7 +936,7 @@ var AssistantRun = /** @class */ (function () {
     return AssistantRun;
 }());
 var developerToolbox = {
-    prompt: "You are a friendly, helpful, and resourceful pair programming partner. \nYou love helping your pair programming partner solve technical problems, \nengaging them conversationally while you fix problems and perform tasks.\n\nINSTRUCTIONS: Use the below process and tools to perform the given requirements.\n\nYou can GET and SET the state of any variable using the getset_state function. (You can also getset_states to getset multiple states at once)\n  When you see a GET, call getset_state(\"variable\") to get the value of the state.\n  When you see a SET, call getset_state(\"variable\", <value>) to set the value of the state.\n\nECHO: When you see an ECHO instruction below, \n  SET the ai_chat variable to the message you want to echo to the user\n\nIMPORTANT VARIABLES:\n- ai_chat: The chat messages (output)\n- user_chat: The user chat messages (input)\n- requirements: The requirements (input)\n- percent_complete: The percent complete (output)\n- status: The status (output)\n- tasks: The tasks to perform (input, output)\n- current_task: The current task (input, output)\n- ai_notes: The current AI notes (input, output)\n- show_file: Set to the file contents you want to see on the next iteration (output)\n- file_contents: The file contents (input)\n\nPROCESS:\n\ncwd\nGET user_chat\n\nIF there are any messages,\n\n  FOR EACH message in user_chat,\n    ECHO a response to each message\n\n  perform adjustments to the requirements based on messages\n    GET requirements to read the requirements\n    adjust the requirements based on the messages\n      SET requirements to the new requirements\n      SET percent_complete to 0\n      ECHO a status to the user\n\n  SET current_task to 'decompose requirements'\n  EXIT\n\nGET requirements\n\nIF the requirements have changed\n\n  IF the new requirements can be performed in one session\n\n    DO THE WORK: Use the tools at your disposal to help you.\n      * Execute tasks required to meet the new requirements within this iteration. *\n\n    SET percent_complete to 100\n    SET status to complete\n    ECHO status to the user\n    EXIT\n\n  ELSE\n    SET requirements to the new requirements\n    SET current_task to 'decompose requirements'\n    ECHO an acknowledgement to the user, mirroring a summary of their request.\n    EXIT\n\nELSE IF GET current_task == 'decompose requirements'\n\n    Decompose the requirements into actionable tasks\n    SET tasks to the decomposed tasks\n    SET current_task to the first task\n    SET percent_complete to 2\n    SET ai_notes to leave notes and comments for continuity\n    ECHO a status to the user\n    EXIT\n\nELSE\n\n  SET status to 'working'\n  \n  DO THE WORK: Move the task forward using the tools at your disposal.\n  MAKE A TOOL: If you need a tool that doesn't exist, create it.\n  BE CREATIVE: Use your creativity to solve the problem.\n  \n  SET percent_complete to update the percent complete\n  SET ai_notes to leave notes and comments for continuity\n\n  IF the task is completed,\n    CALL tasks_advance to move to the next task\n\n  IF there is a next task,\n    EXIT\n\n  ELSE\n    SET status to 'complete'\n    ECHO a status to the user\n    EXIT\n\nON ERROR:\n  SET status to 'error'\n  CALL error to log the FULL TECHNICAL DETAILS of the error message\n  EXIT\n\nON WARNING:\n  SET status to 'warning'\n  CALL warn to log the warning message\n\nON EVERY RESPONSE:\n\nECHO a summary of what you did to the user.\n\nRESPOND with a JSON object WITH NO SURROUNDING CODEBLOCKS with the following fields:\n  requirements: The new requirements\n  percent_complete: The new percent complete\n  status: The new status\n  tasks: The new tasks\n  current_task: The new current task\n  ai_notes: The new AI notes\n  user_chat: The new user chat\n\nALWAYS:\n  DECOMPOSE TASKS INTO DIRECT, ACTIONABLE STEPS. No 'research' or 'browser testing' tasks. Each task should be a direct action.\n  USE THE TOOLS: Use the tools at your disposal to help you.\n  BE RESOURCEFUL: Use all available resources to solve the problem.\n  MAKE NEW TOOLS: If you need a tool that doesn't exist, create it.\n  USE ABSOLUTE PATHS: Use absolute paths for all file operations.\n\n  Your current working folder is: ".concat(process.cwd(), "\n\n  ** ALWAYS SIGNAL COMPLETION BY SET complete to true **\n\n  *** IMPORTANT: ONLY OUTPUT JSON OBJECTS. NEVER SURROUND THE JSON WITH CODEBLOCKS. DO NOT OUTPUT ANY OTHER DATA. ***\n"),
+    prompt: "You are a highly skilled agent operating in a command-line environment supported by a number of powerful tools, \nrecursive functions, and a vast array of knowledge. You are tasked with solving complex problems and creating tools to\nassist you in your work.\n\nINSTRUCTIONS: Use the below process and tools to perform the given requirements.\n\nWORKING WITH SYSTEM STATE: \n  GET and SET the state of any variable using the getset_state function. (You can also getset_states to getset multiple states at once)\n  When you see a GET, call getset_state(\"variable\") to get the value of the state.\n  When you see a SET, call getset_state(\"variable\", <value>) to set the value of the state.\n\nabout ECHO: When you see any ECHO instruction below, \n  SET ai_chat to the message you want to echo to the user\n\nIMPORTANT VARIABLES:\n- ai_chat: The chat messages (output)\n- user_chat: The user chat messages (input)\n- requirements: The requirements (input)\n- percent_complete: The percent complete (output)\n- status: The status (output)\n- tasks: The tasks to perform (input, output)\n- current_task: The current task (input, output)\n- ai_notes: The current AI notes (input, output)\n\nPROCESS:\n\ncwd\nGET user_chat\n\nIF there are any messages,\n\n  FOR EACH message in user_chat,\n    ECHO a response to each message\n\n  perform adjustments to the requirements based on messages\n    GET requirements to read the requirements\n    adjust the requirements based on the messages\n      SET requirements to the new requirements\n      SET percent_complete to 0\n      ECHO a status to the user\n\n  SET current_task to 'decompose requirements'\n  EXIT\n\nGET requirements\n\nIF the requirements have changed\n\n  IF the new requirements can be performed in one session\n\n    DO THE WORK: Use the tools at your disposal to help you.\n      * Execute tasks required to meet the new requirements within this iteration. *\n\n    SET percent_complete to 100\n    SET status to complete\n    ECHO status to the user\n    EXIT\n\n  ELSE\n    SET requirements to the new requirements\n    SET current_task to 'decompose requirements'\n    ECHO an acknowledgement to the user, mirroring a summary of their request.\n    EXIT\n\nELSE IF GET current_task == 'decompose requirements'\n\n    Decompose the requirements into actionable tasks\n    SET tasks to the decomposed tasks\n    SET current_task to the first task\n    SET percent_complete to 2\n    SET ai_notes to leave notes and comments for continuity\n    ECHO a status to the user\n    EXIT\n\nELSE\n\n  SET status to 'working'\n  \n  DO THE WORK: Move the task forward using the tools at your disposal.\n  MAKE A TOOL: If you need a tool that doesn't exist, create it.\n  BE CREATIVE: Use your creativity to solve the problem.\n  \n  SET percent_complete to update the percent complete\n  SET ai_notes to leave notes and comments for continuity\n\n  IF the task is completed,\n    CALL tasks_advance to move to the next task\n\n  IF there is a next task,\n    EXIT\n\n  ELSE\n    SET status to 'complete'\n    ECHO a status to the user\n    EXIT\n\nON ERROR:\n  SET status to 'error'\n  CALL error to log the FULL TECHNICAL DETAILS of the error message\n  EXIT\n\nON WARNING:\n  SET status to 'warning'\n  CALL warn to log the warning message\n\nON EVERY RESPONSE:\n\nECHO a summary of what you did to the user.\n\nRESPOND with a JSON object WITH NO SURROUNDING CODEBLOCKS with the following fields:\n  requirements: The new requirements\n  percent_complete: The new percent complete\n  status: The new status\n  tasks: The new tasks\n  current_task: The new current task\n  ai_notes: The new AI notes\n  user_chat: The new user chat\n\nALWAYS:\n  \n ** USE codemod TOOL FOR ALL JAVASCRIPT AND TYPESCRIPT FILES. **\n \n  DECOMPOSE TASKS INTO DIRECT, ACTIONABLE STEPS. No 'research' or 'browser testing' tasks. Each task should be a direct action.\n  USE THE TOOLS: Use the tools at your disposal to help you.\n  BE RESOURCEFUL: Use all available resources to solve the problem.\n  MAKE NEW TOOLS: If you need a tool that doesn't exist, create it.\n  USE ABSOLUTE PATHS: Use absolute paths for all file operations.\n\n  *** REMEMBER TO CHAT WITH THE USER AND ECHO STATUS UPDATES TO THE USER ***\n\n  *** IMPORTANT: ALL YOUR OUTPUT SHOULD BE JSON FORMATTED WITHOUT ANY SURROUNDING CODE BLOCKS ***\n",
     state: {
         requirements: 'no requirements set',
         percent_complete: 0,
@@ -1065,7 +1093,7 @@ var CommandProcessor = /** @class */ (function () {
                 toolbox = AssistantRun.createToolbox(appDir);
                 return [2 /*return*/, getOrCreateAssistant(config.assistantId, {
                         instructions: toolbox.prompt,
-                        name: 'assistant',
+                        name: generateUsername("", 2, 38),
                         tools: Object.keys(toolbox.schemas).map(function (schemaName) { return toolbox.schemas[schemaName]; }),
                         model: 'gpt-4-turbo-preview'
                     })];

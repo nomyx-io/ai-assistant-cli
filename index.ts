@@ -252,8 +252,6 @@ class AssistantRun {
   assistant: any;
   eventHandler: any;
   usages: any[];
-  file_contents: string;
-  file_name: string;
   state: any = {};
   thread: any;
   run: any;
@@ -271,8 +269,6 @@ class AssistantRun {
     this.commandHandler = commandHandler;
     this.eventHandler = eventHandler;
     this.usages = [];
-    this.file_contents = '';
-    this.file_name = '';
     this.toolbox = toolbox;
     this.tools = toolbox.tools;
     this.schemas = toolbox.schemas;
@@ -354,7 +350,7 @@ class AssistantRun {
     return toolbox;
   }
 
-  static async createRun(content: string, toolbox: any, commandHandler: any, eventHandler: any) {
+  static async createRun(content: string, toolbox: any, commandHandler: any, eventHandler: any): Promise<any> {
     const aRunObj = new AssistantRun(toolbox, commandHandler, eventHandler);
     CommandProcessor.taskQueue.push(aRunObj);
     const input_vars: any = {
@@ -368,9 +364,13 @@ class AssistantRun {
     if(containsFlag('--attach')||containsFlag('-a')) {
       // load the file and attach it to the run
       const fPath = path.join(process.cwd(), args[1]);
-      const file = fs.readFileSync(fPath, 'utf8');
+      let file = fs.readFileSync(fPath, 'utf8');
+      // truncate the file if it's longer than 8k
+      if(file.length > 8192) {
+        file = file.slice(0, 8192);
+        file += '\n\n... file truncated, use head or tail to view the rest of the file ...';
+      }
       input_vars.file_contents = file;
-      input_vars.file_name = aRunObj.file_name;
       console.log(`attached file: ${fPath}`);
     }
 
@@ -378,7 +378,12 @@ class AssistantRun {
       if (event === 'exec-tools') {
         data.toolOutputs.forEach((output: any) => {
           const func = data.toolCalls.find((call: any) => call.id === output.tool_call_id).function.name;
-          console.log(`$ ${func} (${func.arguments ? func.arguments : ''}) => ${output.output}`);
+          const fout = {
+            function: func,
+            arguments: data.toolCalls.find((call: any) => call.id === output.tool_call_id).function.arguments,
+            output: output.output
+          }
+          console.table([fout]);
         });
       }
       if (event == 'assistant-completed') {
@@ -402,6 +407,10 @@ class AssistantRun {
       if (parsedResponse.show_file) {
         aRunObj.state.file_name = parsedResponse.show_file;
         aRunObj.state.file_contents = fs.readFileSync(parsedResponse.show_file, 'utf8');
+        if( aRunObj.state.file_contents.length > 8192) {
+          aRunObj.state.file_contents =  aRunObj.state.file_contents.slice(0, 8192);
+          aRunObj.state.file_contents += '\n\n... file truncated, use head or tail to view the rest of the file ...';
+        }
       } else {
         aRunObj.state.file_name = '';
         aRunObj.state.file_contents = '';
@@ -411,14 +420,38 @@ class AssistantRun {
       }
     } catch (e) {
     }
-    if (aRunObj.state.status === 'complete' || aRunObj.state.status === 'idle' || parseInt(aRunObj.state.percent_complete) === 100) {
+
+    const usageSummary = aRunObj.usages.reduce((acc, usage) => {
+      for (const key in usage) {
+        if (usage[key] && usage[key] !== 'null') {
+          acc[key] += usage[key];
+        }
+      }
+      return acc;
+    }, {
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      chat_tokens: 0,
+    });
+    
+
+    if (parseInt(aRunObj.state.percent_complete) === 100) {
+      aRunObj.usages.push(usageSummary);
       console.table(aRunObj.usages);
       console.table(aRunObj.state);
       aRunObj.persist('done');
       aRunObj.stopSpinner();
       CommandProcessor.rl.prompt();
     } else {
-      CommandProcessor.rl.prompt();
+      // add another run to the queue using the last state
+      return AssistantRun.createRun(JSON.stringify({
+        requirements: aRunObj.state.requirements,
+        current_task: aRunObj.state.current_task,
+        percent_complete: aRunObj.state.percent_complete,
+        ai_notes: aRunObj.state.ai_notes,
+        user_chat: aRunObj.state.user_chat,
+        ai_chat: aRunObj.state.ai_chat,
+      }), toolbox, commandHandler, eventHandler);
     }
     CommandProcessor.taskQueue.splice(CommandProcessor.taskQueue.indexOf(aRunObj), 1);
     return aRunObj;
@@ -469,12 +502,10 @@ class AssistantRun {
     process.stdout.write(`✔ ${message}\r\n`); // Write the message to stdout with an icon and start a new line
   }
   async runAssistant(content: string, onEvent: any): Promise<string> {
-    this.startSpinner();
-
     // create or loaSpd the assistant
     this.assistant = await getOrCreateAssistant(config.assistantId, {
       instructions: developerToolbox.prompt,
-      name: 'assistant',
+      name: generateUsername("", 2, 38),
       tools: Object.keys(this.toolbox.schemas).map((schemaName) => this.toolbox.schemas[schemaName as any]),
       model: 'gpt-4-turbo-preview'
     });
@@ -492,10 +523,13 @@ class AssistantRun {
         return msg
       } catch (e: any) {
         // get an string out that starts with run_xxxxxx
-        const runId = e.message.match(/run_\w+/)[0];
+        let runId = e.message.match(/run_\w+/);
         if (runId) {
+          runId = runId[0];
           await cancelRun(threadId, runId);
           return createMessage(threadId, content);
+        } else {
+          throw e;
         }
       }
     }
@@ -526,7 +560,7 @@ class AssistantRun {
       // if the run has failed, we set the latest message to the error message
       if (this.run.status === "failed") {
         // x mark
-        process.stdout.write(`✖`);
+        process.stdout.write(`✖\n`);
         this.status = 'failed';
         if (await waitIfRateLimited(this.run)) return loop();
         this.latestMessage = 'failed run: ' + this.run.last_error || this.latestMessage;
@@ -537,7 +571,7 @@ class AssistantRun {
       // if the run is cancelled, we set the latest message to 'cancelled run'
       else if (this.run.status === "cancelled") {
         // cancel mark
-        process.stdout.write(`✖`);
+        process.stdout.write(`✖\n`);
         this.status = 'cancelled';
         this.latestMessage = 'cancelled run';
         onEvent('assistant-cancelled', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id });
@@ -547,7 +581,7 @@ class AssistantRun {
       // if the run is completed, we set the latest message to the last message in the thread
       else if (this.run.status === "completed") {
         // check mark
-        process.stdout.write(`✔`);
+        process.stdout.write(`✔\n`);
         this.status = 'completed';
         this.run_steps = await listRunSteps(this.thread.id, this.run.id);
         this.run_steps = await retrieveRunSteps(this.thread.id, this.run.id, this.run_steps.data[this.run_steps.data.length - 1].id);
@@ -591,10 +625,6 @@ class AssistantRun {
       for (const key in json) {
         this.state[key] = json[key];
       }
-      if(this.state.show_file) {
-        this.file_name = this.state.show_file;
-        this.file_contents = fs.readFileSync(this.state.show_file, 'utf8');
-      }
       if(this.state.ai_chat) {
         console.log(this.state.ai_chat);
       }
@@ -605,8 +635,6 @@ class AssistantRun {
         }
       }
     } catch (e) { console.log('parse error', response); }
-
-    this.stopSpinner();
 
     return response;
   }
@@ -656,18 +684,19 @@ class AssistantRun {
 }
 
 const developerToolbox = {
-  prompt: `You are a friendly, helpful, and resourceful pair programming partner. 
-You love helping your pair programming partner solve technical problems, 
-engaging them conversationally while you fix problems and perform tasks.
+  prompt: `You are a highly skilled agent operating in a command-line environment supported by a number of powerful tools, 
+recursive functions, and a vast array of knowledge. You are tasked with solving complex problems and creating tools to
+assist you in your work.
 
 INSTRUCTIONS: Use the below process and tools to perform the given requirements.
 
-You can GET and SET the state of any variable using the getset_state function. (You can also getset_states to getset multiple states at once)
+WORKING WITH SYSTEM STATE: 
+  GET and SET the state of any variable using the getset_state function. (You can also getset_states to getset multiple states at once)
   When you see a GET, call getset_state("variable") to get the value of the state.
   When you see a SET, call getset_state("variable", <value>) to set the value of the state.
 
-ECHO: When you see an ECHO instruction below, 
-  SET the ai_chat variable to the message you want to echo to the user
+about ECHO: When you see any ECHO instruction below, 
+  SET ai_chat to the message you want to echo to the user
 
 IMPORTANT VARIABLES:
 - ai_chat: The chat messages (output)
@@ -678,8 +707,6 @@ IMPORTANT VARIABLES:
 - tasks: The tasks to perform (input, output)
 - current_task: The current task (input, output)
 - ai_notes: The current AI notes (input, output)
-- show_file: Set to the file contents you want to see on the next iteration (output)
-- file_contents: The file contents (input)
 
 PROCESS:
 
@@ -776,17 +803,18 @@ RESPOND with a JSON object WITH NO SURROUNDING CODEBLOCKS with the following fie
   user_chat: The new user chat
 
 ALWAYS:
+  
+ ** USE codemod TOOL FOR ALL JAVASCRIPT AND TYPESCRIPT FILES. **
+ 
   DECOMPOSE TASKS INTO DIRECT, ACTIONABLE STEPS. No 'research' or 'browser testing' tasks. Each task should be a direct action.
   USE THE TOOLS: Use the tools at your disposal to help you.
   BE RESOURCEFUL: Use all available resources to solve the problem.
   MAKE NEW TOOLS: If you need a tool that doesn't exist, create it.
   USE ABSOLUTE PATHS: Use absolute paths for all file operations.
 
-  Your current working folder is: ${process.cwd()}
+  *** REMEMBER TO CHAT WITH THE USER AND ECHO STATUS UPDATES TO THE USER ***
 
-  ** ALWAYS SIGNAL COMPLETION BY SET complete to true **
-
-  *** IMPORTANT: ONLY OUTPUT JSON OBJECTS. NEVER SURROUND THE JSON WITH CODEBLOCKS. DO NOT OUTPUT ANY OTHER DATA. ***
+  *** IMPORTANT: ALL YOUR OUTPUT SHOULD BE JSON FORMATTED WITHOUT ANY SURROUNDING CODE BLOCKS ***
 `,
   state: {
     requirements: 'no requirements set',
@@ -963,7 +991,7 @@ class CommandProcessor {
     const toolbox = AssistantRun.createToolbox(appDir);
     return getOrCreateAssistant(config.assistantId, {
       instructions: toolbox.prompt,
-      name: 'assistant',
+      name: generateUsername("", 2, 38),
       tools: Object.keys(toolbox.schemas).map((schemaName) => toolbox.schemas[schemaName as any]),
       model: 'gpt-4-turbo-preview'
     });
