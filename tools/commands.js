@@ -36,29 +36,254 @@ const toolSchema = {
     {type: 'function', function: {name: 'find', description: 'Searches for files and directories based on a pattern', parameters: {type: 'object', properties: {directory: {type: 'string', description: 'The directory to search in'}, pattern: {type: 'string', description: 'The search pattern'}}, required: ['directory', 'pattern']}}},
   ],
   tools: {
-    getsetcwd : function ({path}) { if(path) process.chdir(path); return "Current Directory: " + process.cwd(); },
-    cp: function ({source, destination}) { exec(`cp ${pathModule.join(cwd,source)} ${pathModule.join(cwd,destination)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    mv: function ({source, destination}) { exec(`mv ${pathModule.join(cwd,source)} ${pathModule.join(cwd,destination)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    rm: function ({path}) { exec(`rm -rf ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    cat: function ({path}) { exec(`cat ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    greg: function ({path, pattern}) { exec(`grep ${pattern} ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    curl: function ({url}) { exec(`curl ${url}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    head: function ({path, lines}) { exec(`head -n ${lines} ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    stat: function ({path}) { exec(`stat ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    tail: function ({path, lines}) { exec(`tail -n ${lines} ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    sed: function ({path, pattern, replacement}) { exec(`sed -i 's/${pattern}/${replacement}/g' ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    awk: function ({path, pattern, replacement}) { exec(`awk '{gsub(/${pattern}/${replacement}/g)}1' ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    touch: function ({path}) { exec(`touch ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`${stdout}${stderr}`); }); },
-    ls: function ({directory, options = ''}) { exec(`ls ${options} ${pathModule.join(cwd,directory)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    chmod: function ({path, mode}) { exec(`chmod ${mode} ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    ln: function ({target, linkName}) { exec(`ln -s ${target} ${linkName}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    mkdir: function ({path, recursive = false}) { let command = recursive ? `mkdir -p ${pathModule.join(cwd,path)}` : `mkdir ${pathModule.join(cwd,path)}`; exec(command, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    rmdir: function ({path}) { exec(`rmdir ${pathModule.join(cwd,path)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    rename: function ({oldPath, newPath}) { exec(`mv ${pathModule.join(cwd,oldPath)} ${pathModule.join(cwd,newPath)}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    find: function ({directory, pattern}) { exec(`find ${pathModule.join(cwd,directory)} -name "${pattern}"`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); },
-    call_npm_method: function ({npmlib, method, args}) { const ret = require(npmlib)[method](args); return ret ? npmlib  + ' ' + method + ' ' + args + ' called: ' + JSON.stringify(ret) : 'Error calling ' + npmlib + ' ' + method + ' ' + args; },
-    list_npm_libraries: function (_) { return JSON.stringify(fs.readdirSync(pathModule.join(process.cwd(), 'node_modules'))); },
-    install_npm_library: function ({library}) { exec(`npm install ${library}`, (error, stdout, stderr) => { if (error) { console.error(`exec error: ${error}`); return; } console.log(`stdout: ${stdout}`); console.error(`stderr: ${stderr}`); }); }
+    ls: async function ({directory, options = ''}) {
+      return new Promise((resolve, reject) => {
+        exec(`ls ${options?options:''} ${directory}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          } 
+          resolve(stdout);
+        }); 
+      });
+    },
+    chmod: async function ({path, mode}) {
+      return new Promise((resolve, reject) => {
+        exec(`chmod ${mode} ${path}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          } 
+          resolve(stdout);
+        }); 
+      });
+    },
+    ln: async function ({target, linkName}) {
+      return new Promise((resolve, reject) => {
+        exec(`ln -s ${target} ${linkName}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          } 
+          resolve(stdout);
+        }); 
+      });
+    },
+    mkdir: async function ({path, recursive = false}) {
+      return new Promise((resolve, reject) => {
+        exec(`mkdir ${recursive?'-p':''} ${path}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          } 
+          resolve(stdout);
+        }); 
+      });
+    },
+    rmdir: async function ({path}) {
+      return new Promise((resolve, reject) => {
+        exec(`rmdir ${path}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          } 
+          resolve(stdout);
+        }); 
+      });
+    },
+    rename: async function ({oldPath, newPath}) {
+      return new Promise((resolve, reject) => {
+        exec(`mv ${oldPath} ${newPath}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          } 
+          resolve(stdout);
+        }); 
+      });
+    },
+    find: async function ({directory, pattern}) {
+      return new Promise((resolve, reject) => {
+        exec(`find ${directory} -name ${pattern}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          } 
+          resolve(stdout);
+        }); 
+      });
+    },
+    call_npm_method: async function ({npmlib, method, args}) {
+      return new Promise((resolve, reject) => {
+        let lib = require(npmlib);
+        let methodArgs = args.split(',');
+        let result = lib[method](...methodArgs);
+        resolve(result);
+      });
+    },
+    list_npm_libraries: async function () {
+      return new Promise((resolve, reject) => {
+        let packageJson = pathModule.join(cwd, 'package.json');
+        if (!fs.existsSync(packageJson)) {
+          resolve('No package.json found in the current directory');
+        }
+        let package = require(packageJson);
+        let dependencies = package.dependencies || {};
+        let devDependencies = package.devDependencies || {};
+        let allDependencies = {...dependencies, ...devDependencies};
+        let result = Object.keys(allDependencies);
+        resolve(result);
+      });
+    },
+    install_npm_library: async function ({library}) {
+      return new Promise((resolve, reject) => {
+        exec(`npm install ${library}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          } 
+          resolve(stdout);
+        }); 
+      });
+    },
+    getsetcwd: async function ({path}) {
+      if (path) {
+        cwd = path;
+      }
+      return cwd;
+    },
+    cp: async function ({source, destination}) {
+      return new Promise((resolve, reject) => {
+        exec(`cp ${source} ${destination}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          } 
+          resolve(stdout);
+        }); 
+      });
+    },
+    mv: async function ({source, destination}) {
+      return new Promise((resolve, reject) => {
+        exec(`mv ${source} ${destination}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          } 
+          resolve(stdout);
+        }); 
+      });
+    },
+    rm: async function ({path}) {
+      return new Promise((resolve, reject) => {
+        exec(`rm -rf ${path}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          } 
+          resolve(stdout);
+        }); 
+      });
+    },
+    cat: async function ({path}) {
+      return new Promise((resolve, reject) => {
+        exec(`cat ${path}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          }
+          resolve(stdout);
+        }); 
+      });
+    },
+    grep: async function ({path, pattern}) {
+      return new Promise((resolve, reject) => {
+        exec(`grep ${pattern} ${path}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          }
+          resolve(stdout);
+        }); 
+      });
+    },
+    curl: async function ({url}) {
+      return new Promise((resolve, reject) => {
+        exec(`curl ${url}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          }
+          resolve(stdout);
+        }); 
+      });
+    },
+    head: async function ({path, lines}) {
+      return new Promise((resolve, reject) => {
+        exec(`head -n ${lines} ${path}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          }
+          resolve(stdout);
+        }); 
+      });
+    },
+    stat: async function ({path}) {
+      return new Promise((resolve, reject) => {
+        exec(`stat ${path}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          }
+          resolve(stdout);
+        }); 
+      });
+    },
+    tail: async function ({path, lines}) {
+      return new Promise((resolve, reject) => {
+        exec(`tail -n ${lines} ${path}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          }
+          resolve(stdout);
+        }); 
+      });
+    },
+    sed: async function ({path, pattern, replacement}) {
+      return new Promise((resolve, reject) => {
+        exec(`sed -i 's/${pattern}/${replacement}/g' ${path}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          }
+          resolve(stdout);
+        }); 
+      });
+    },
+    awk: async function ({path, pattern, replacement}) {
+      return new Promise((resolve, reject) => {
+        exec(`awk '{gsub(/${pattern}/, "${replacement}"); print}' ${path}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          }
+          resolve(stdout);
+        }); 
+      });
+    },
+    touch: async function ({path}) {
+      return new Promise((resolve, reject) => {
+        exec(`touch ${path}`, (error, stdout, stderr) => { 
+          if (error) { 
+            console.error(`exec error: ${error}`); 
+            resolve('error: ' + error + ' ' + stderr);
+          }
+          resolve(stdout);
+        }); 
+      });
+    },
   }
 }
 module.exports = toolSchema;

@@ -1,13 +1,9 @@
 // import axios from "axios";
 const axios = require('axios');
+const config = require('../config');
 
-let cxKey = process.env.GOOGLE_CX;
-let apiKey = process.env.GOOGLE_API_KEY;
-try {
-    var config = require('../config');
-    cxKey = config.google.cx;
-    apiKey = config.google.apiKey;
-} catch(e) {}
+let cxKey = config.GOOGLE_CX_ID;
+let apiKey = config.GOOGLE_API_KEY;
 
 module.exports = {
     state: {

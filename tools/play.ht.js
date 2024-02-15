@@ -42,10 +42,10 @@ module.exports = {
     tools: {
         say_aloud: async ({ text, voice }) => {
             var config = require('../config');
-            const apiKey = process.env.PLAYHT_AUTHORIZATION;
-            const userId = process.env.PLAYHT_USER_ID;
-            const maleVoice = process.env.PLAYHT_MALE_VOICE;
-            const femaleVoice = process.env.PLAYHT_FEMALE_VOICE;
+            const apiKey = config.PLAYHT_AUTHORIZATION;
+            const userId = config.PLAYHT_USER_ID;
+            const maleVoice = config.PLAYHT_MALE_VOICE;
+            const femaleVoice = config.PLAYHT_FEMALE_VOICE;
             if(!voice) voice = config.playHT.defaultVoice;
             if(!apiKey || !userId || !maleVoice || !femaleVoice) {
                 const missing = [];
@@ -55,7 +55,6 @@ module.exports = {
                 if(!femaleVoice) missing.push('playHT.femaleVoice');
                 return `Missing configuration: ${missing.join(', ')} in configuration file. Please ask the user to provide the missing configuration using the ask_for_data tool.`;
             }
-
             // Initialize PlayHT API
             PlayHT.init({
                 apiKey: apiKey,
