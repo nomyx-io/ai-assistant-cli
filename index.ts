@@ -3,6 +3,7 @@ const OpenAI = require('openai');
 const fs = require('fs');
 const path = require('path');
 const { generateUsername } = require("unique-username-generator");
+var clc = require("cli-color");
 
 // get command-line arguments
 const args = process.argv.slice(2);
@@ -364,6 +365,14 @@ class AssistantRun {
       user_chat: content,
       ai_chat: '',
     }
+    if(containsFlag('--attach')||containsFlag('-a')) {
+      // load the file and attach it to the run
+      const fPath = path.join(process.cwd(), args[1]);
+      const file = fs.readFileSync(fPath, 'utf8');
+      input_vars.file_contents = file;
+      input_vars.file_name = aRunObj.file_name;
+      console.log(`attached file: ${fPath}`);
+    }
 
     let ret = await aRunObj.runAssistant(JSON.stringify(input_vars), (event: any, data: any) => {
       if (event === 'exec-tools') {
@@ -415,27 +424,22 @@ class AssistantRun {
     return aRunObj;
   }
   frames = [
-    // "🌑 ",
-    // "🌒 ",
-    // "🌓 ",
-    // "🌔 ",
-    // "🌕 ",
-    // "🌖 ",
-    // "🌗 ",
-    // "🌘 "
     "◟", "◡", "◞", "◝", "◠", "◜", "◟", "◡", "◞", "◝", "◠", "◜"
   ]
   currentIndex = 0
   spinning = false
   interval =120
+  dots = 0
   renderFrame(frame: any) {
-    readline.clearLine(process.stdout, 0); // Clear the entire line
-    readline.cursorTo(process.stdout, 0); // Move the cursor to the beginning of the line
-    process.stdout.write(`${frame}\r`); // Write the frame and title
+    //readline.clearLine(process.stdout, this.dots); // Clear the entire line
+    readline.cursorTo(process.stdout, this.dots); // Move the cursor to the beginning of the line
+    const dots = '.'.repeat(this.dots);
+    process.stdout.write(`${frame}\r${dots}\r`);
   }
   startSpinner() {
     this.spinning = true;
     this.timer = setInterval(() => {
+      this.dots = (this.dots + 1) % 3;
       const frame = this.frames[this.currentIndex];
       this.renderFrame(frame);
       this.currentIndex = (this.currentIndex + 1) % this.frames.length;
@@ -467,7 +471,7 @@ class AssistantRun {
   async runAssistant(content: string, onEvent: any): Promise<string> {
     this.startSpinner();
 
-    // create or load the assistant
+    // create or loaSpd the assistant
     this.assistant = await getOrCreateAssistant(config.assistantId, {
       instructions: developerToolbox.prompt,
       name: 'assistant',
@@ -521,6 +525,8 @@ class AssistantRun {
 
       // if the run has failed, we set the latest message to the error message
       if (this.run.status === "failed") {
+        // x mark
+        process.stdout.write(`✖`);
         this.status = 'failed';
         if (await waitIfRateLimited(this.run)) return loop();
         this.latestMessage = 'failed run: ' + this.run.last_error || this.latestMessage;
@@ -530,6 +536,8 @@ class AssistantRun {
 
       // if the run is cancelled, we set the latest message to 'cancelled run'
       else if (this.run.status === "cancelled") {
+        // cancel mark
+        process.stdout.write(`✖`);
         this.status = 'cancelled';
         this.latestMessage = 'cancelled run';
         onEvent('assistant-cancelled', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id });
@@ -538,6 +546,8 @@ class AssistantRun {
 
       // if the run is completed, we set the latest message to the last message in the thread
       else if (this.run.status === "completed") {
+        // check mark
+        process.stdout.write(`✔`);
         this.status = 'completed';
         this.run_steps = await listRunSteps(this.thread.id, this.run.id);
         this.run_steps = await retrieveRunSteps(this.thread.id, this.run.id, this.run_steps.data[this.run_steps.data.length - 1].id);
@@ -549,6 +559,8 @@ class AssistantRun {
       // if the run is queued or in progress, we wait for the run to complete
       else if (this.run.status === "queued" || this.run.status === "in_progress") {
         while (this.run.status === "queued" || this.run.status === "in_progress") {
+          // working mark
+          process.stdout.write(`⚙`);
           this.status = 'in-progress';
           this.run = await retrieveRun(this.thread.id, this.run.id);
           this.run_steps = await listRunSteps(this.thread.id, this.run.id);
@@ -561,6 +573,7 @@ class AssistantRun {
 
       // if the run requires action, we execute the tools and submit the outputs
       else if (this.run.status === "requires_action") {
+        process.stdout.write(`⚠`);
         this.status = 'executing-tools';
         this.toolCalls = this.run.required_action.submit_tool_outputs.tool_calls;
         this.toolOutputs = await this.execTools(this.toolCalls, this.toolbox.tools, onEvent, this.state);
@@ -569,7 +582,7 @@ class AssistantRun {
         onEvent('submit-tool-outputs', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, toolOutputs: this.toolOutputs });
         return loop();
       }
-
+      process.stdout.write(`\r\n`);
       return loop();
     }
     const response = await loop();
@@ -656,8 +669,6 @@ You can GET and SET the state of any variable using the getset_state function. (
 ECHO: When you see an ECHO instruction below, 
   SET the ai_chat variable to the message you want to echo to the user
 
-Your current working folder is: ${process.cwd()}
-
 IMPORTANT VARIABLES:
 - ai_chat: The chat messages (output)
 - user_chat: The user chat messages (input)
@@ -672,6 +683,7 @@ IMPORTANT VARIABLES:
 
 PROCESS:
 
+cwd
 GET user_chat
 
 IF there are any messages,
@@ -966,6 +978,7 @@ class CommandProcessor {
       });
     }).on('close', async () => {
       // cancel the assistant run
+      process.stdout.write(`\r\n`);
       if (await CommandProcessor.cancel() && CommandProcessor.taskQueue.length > 0) {
         console.log('cancelled');
         CommandProcessor.rl.prompt();
