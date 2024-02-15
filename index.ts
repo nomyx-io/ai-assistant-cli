@@ -15,6 +15,11 @@ const requireMain = require.main || { filename: __filename };
 
 // get the application's install directory
 let appDir = path.dirname(requireMain.filename);
+const appDirParts = appDir.split(path.sep);
+if (appDirParts[appDirParts.length - 1] === 'bin') {
+  appDirParts.pop();
+  appDir = appDirParts.join(path.sep);
+}
 
 function containsFlag(flag: string) {
   return flags.indexOf(flag) !== -1;
@@ -32,11 +37,14 @@ function loadConfig() {
     return JSON.parse(fs.readFileSync(path.join(appDir, 'config.json')));
   } else {
     const config = {
-      apiKey: process.env.OPENAI_API_KEY,
-      playHtApiKey: process.env.PLAYHT_AUTHORIZATION,
-      playHtUserId: process.env.PLAYHT_USER_ID,
-      playHtMaleVoice: process.env.PLAYHT_MALE_VOICE,
-      playHtFemaleVoice: process.env.PLAYHT_FEMALE_VOICE
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      PLAYHT_AUTHORIZATION: process.env.PLAYHT_AUTHORIZATION,
+      PLAYHT_USER_ID: process.env.PLAYHT_USER_ID,
+      PLAYHT_MALE_VOICE: process.env.PLAYHT_MALE_VOICE,
+      PLAYHT_FEMALE_VOICE: process.env.PLAYHT_FEMALE_VOICE,
+      GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+      GOOGLE_CX_ID: process.env.GOOGLE_CX_ID,
+      NEWS_API_KEY: process.env.NEWS_API_KEY,
     };
     saveConfig(config as any);
     return config;
@@ -80,6 +88,120 @@ async function withRetriesAndTimeouts(func: any, retries = 3, timeout = 1000) {
   return _();
 }
 
+
+const getOrCreateAssistant = async (assistantId: any, inputObject: any) => {
+  return withRetriesAndTimeouts(async () => {
+    if (assistantId) {
+      try {
+        return await openai.beta.assistants.retrieve(assistantId);
+      }
+      catch (error) {
+        return await openai.beta.assistants.create(inputObject);
+      }
+    }
+    else return await openai.beta.assistants.create(inputObject);
+  });
+}
+
+const getOrCreateThread = async (config: any) => {
+  return withRetriesAndTimeouts(async () => {
+    if (!config.threadId) {
+      const thread = openai.beta.threads.create();
+      config.threadId = thread.id;
+      saveConfig(config);
+      return thread;
+    } else {
+      try {
+        return openai.beta.threads.retrieve(config.threadId);
+      } catch (e) {
+        if (config.threadId) {
+          delete config.threadId;
+          saveConfig(config);
+          return getOrCreateThread(config);
+        } else throw e;
+      }
+    }
+  });
+}
+
+const getLatestMessage = async (threadId: string) => {
+  return withRetriesAndTimeouts(async () => {
+    if (threadId) {
+      const messages = await openai.beta.threads.messages.list(threadId);
+      const message = messages.data[messages.data.length - 1].content;
+      const rval = message[0].text.value;
+      return rval.replace(/\\n/g, '');
+    } else throw new Error('No threadId provided');
+  });
+}
+
+  // wait for the rate limit to be lifted
+const waitIfRateLimited = async (run: any) => {
+  if (!run) return false;
+  if (!run.last_error) return false;
+  if (run.last_error && run.last_error.indexOf && run.last_error.indexOf('rate limited') !== -1) {
+    const waitTime = (
+      parseInt(run.last_error.match(/(\d+)m(\d+)/)[1]) * 60 + parseInt(run.last_error.match(/(\d+)m(\d+)/)[2]) + 1) * 1000;
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+    return true;
+  } else return false;
+}
+
+const createMessage = async (threadId: string, content: string) => {
+  return withRetriesAndTimeouts(async () => {
+    return await openai.beta.threads.messages.create(threadId, { role: "user", content });
+  });
+}
+
+const createThread = async () => {
+  return withRetriesAndTimeouts(async () => {
+    return await openai.beta.threads.create();
+  });
+}
+
+const loadThread = async (threadId: string) => {
+  return withRetriesAndTimeouts(async () => {
+    return await openai.beta.threads.retrieve(threadId);
+  })
+}
+
+const createRun = async (assistantId: string, threadId: string) => {
+  return withRetriesAndTimeouts(async () => {
+    return await openai.beta.threads.runs.create(threadId, { assistant_id: assistantId });
+  });
+}
+
+const retrieveRun = async (threadId: string, runId: string) => {
+  return withRetriesAndTimeouts(async () => {
+    return await openai.beta.threads.runs.retrieve(threadId, runId);
+  });
+}
+
+const listRunSteps = async (threadId: string, runId: string) => {
+  return withRetriesAndTimeouts(async () => {
+    return await openai.beta.threads.runs.steps.list(threadId, runId);
+  });
+}
+
+const retrieveRunSteps = async (threadId: string, runId: string, stepId: string) => {
+  return withRetriesAndTimeouts(async () => {
+    return await openai.beta.threads.runs.steps.retrieve(threadId, runId, stepId);
+  });
+}
+
+const modifyRun = async (threadId: string, runId: string, data: string) => {
+  return withRetriesAndTimeouts(async () => {
+    return await openai.beta.threads.runs.update(threadId, runId, data);
+  });
+}
+
+const cancelRun = async (threadId: string, runId: string) => {
+  return withRetriesAndTimeouts(async () => {
+    return await openai.beta.threads.runs.cancel(threadId, runId);
+  });
+}
+
+
 class AssistantRunner {
   thread: any
   run: any
@@ -89,12 +211,8 @@ class AssistantRunner {
   prompt: any
   id
   uid
-  state
   timer: any
   toolbox: any
-  toolCalls: any
-  toolOutputs: any
-
   latestMessage: string = '';
 
   constructor(
@@ -104,8 +222,6 @@ class AssistantRunner {
     this.run = undefined;
     this.run_steps = undefined;
     this.status = 'idle';
-    this.prompt = toolbox.prompt;
-    this.state = toolbox.state;
     this.assistant = undefined;
     this.timer = 0;
     this.id = '';
@@ -117,15 +233,6 @@ class AssistantRunner {
       openai.beta.threads.runs.cancel(this.thread.id, this.run.id);
     }
     openai.beta.assistants.del(this.assistant.id);
-  }
-
-  static async createAssistantFromPersona(toolbox: any, name: string) {
-    return openai.beta.assistants.create({
-      instructions: toolbox.persona,
-      name,
-      tools: Object.keys(toolbox.schemas).map((schemaName) => toolbox.schemas[schemaName as any]),
-      model: 'gpt-4-turbo-preview'
-    });
   }
 
   // request a cancellation of the run
@@ -141,7 +248,6 @@ class AssistantRunner {
 }
 
 class AssistantRun {
-  assistantRunner: AssistantRunner;
   assistant: any;
   eventHandler: any;
   usages: any[];
@@ -151,197 +257,228 @@ class AssistantRun {
   thread: any;
   run: any;
   run_steps: any;
-  timer: any;
   status: string = 'idle';
+  timer: any;
   latestMessage: string = '';
   toolbox: any;
+  tools: any;
+  schemas: any;
   toolCalls: any;
   toolOutputs: any;
-  constructor(assistantRunner: any, toolbox: any, eventHandler: any) {
+  commandHandler: any;
+  constructor(toolbox: any, commandHandler: any, eventHandler: any) {
+    this.commandHandler = commandHandler;
     this.eventHandler = eventHandler;
-    this.assistantRunner = assistantRunner;
     this.usages = [];
     this.file_contents = '';
     this.file_name = '';
+    this.toolbox = toolbox;
+    this.tools = toolbox.tools;
+    this.schemas = toolbox.schemas;
+    this.state = toolbox.state;
   }
-  static async createRun(content: string, toolbox: any, eventHandler: any) {
-    const aRunnerObj = new AssistantRunner(developerToolbox, config.assistantId);
-    const aRunObj = new AssistantRun(aRunnerObj, toolbox, eventHandler);
+  static getCommandHandler(command: string, run: any) {
+    if (AssistantRun.commandHandlers[command]) {
+      return () => AssistantRun.commandHandlers[command](command, run);
+    } else if (AssistantRun.commandHandlers['*']) {
+      return () => AssistantRun.commandHandlers['*'](command, run);
+    }
+    return null;
+  }
+  static commandHandlers: any = {
+    'quit': (_:any, run: any) => process.exit(),
+    'clear': (_:any, run: any) => {
+      process.stdout.write('\x1Bc');
+      CommandProcessor.rl.prompt();
+    },
+    'clean': async (_: any, run: any) => {
+      const assistants = (await openai.beta.assistants.list()).data
+      const rlAssistants = assistants.filter((assistant: any) => assistant.name === 'assistant');
+      const toolmakerAssistants = assistants.filter((assistant: any) => assistant.name === 'toolmaker');
+      const toDelete = [...rlAssistants, ...toolmakerAssistants];
+      if (toDelete.length > 0) {
+        const delCount = toDelete.length;
+        await Promise.all(toDelete.map((assistant) => openai.beta.assistants.del(assistant.id)));
+        console.log(`deleted ${delCount} assistants`);
+      }
+    },
+    'env': async (command: string, run: any) => {
+      const [_, key, value] = command.split(' ');
+      if (key && value) {
+        process.env[key] = value;
+        CommandProcessor.rl.prompt();
+      }
+    },
+    'reset': async (_: string, run: any) => {
+      delete config.assistantId;
+      delete config.threadId;
+      delete config.runId;
+      saveConfig(config);
+      CommandProcessor.assistantRunner = new AssistantRunner(AssistantRun.createToolbox(appDir));
+      config.assistantId = CommandProcessor.assistantRunner.id;
+      saveConfig(config);
+      CommandProcessor.rl.prompt();
+    },
+    'echo': async (echo: string, run: any) => {
+      console.log(echo);
+    },
+    '*': async (command: string, run: any) => { // Make sure this is marked as async
+      if (run.status === 'working') {
+        return command;
+      }
+      config.assistantId = CommandProcessor.assistantRunner.uid;
+      saveConfig(config);
+    }
+  };
+
+  static createToolbox(appDir: any) {
+    const toolbox: any = {
+      prompt: developerToolbox.prompt,
+      tools: developerToolbox.tools,
+      schemas: developerToolbox.schemas,
+      state: developerToolbox.state
+    }
+    const toolsFolder = path.join(appDir, 'tools')
+    if (fs.existsSync(toolsFolder)) {
+      const files = fs.readdirSync(toolsFolder);
+      files.forEach((file: any) => {
+        const tool = require(path.join(appDir, 'tools', file));
+        toolbox.tools = { ...toolbox.tools, ...tool.tools };
+        toolbox.schemas = [...toolbox.schemas, ...tool.schemas];
+        toolbox.state = { ...toolbox.state, ...tool.state };
+      });
+    } else {
+      fs.mkdirSync(path.join(appDir, 'tools'));
+    }
+    return toolbox;
+  }
+
+  static async createRun(content: string, toolbox: any, commandHandler: any, eventHandler: any) {
+    const aRunObj = new AssistantRun(toolbox, commandHandler, eventHandler);
     CommandProcessor.taskQueue.push(aRunObj);
-    await aRunObj._run(content);
+    const input_vars: any = {
+      requirements: content,
+      current_task: aRunObj.state.current_task || '',
+      percent_complete: aRunObj.state.percent_complete,
+      ai_notes: aRunObj.state.ai_notes,
+      user_chat: content,
+      ai_chat: '',
+    }
+
+    let ret = await aRunObj.runAssistant(JSON.stringify(input_vars), (event: any, data: any) => {
+      if (event === 'exec-tools') {
+        data.toolOutputs.forEach((output: any) => {
+          const func = data.toolCalls.find((call: any) => call.id === output.tool_call_id).function.name;
+          console.log(`$ ${func} (${func.arguments ? func.arguments : ''}) => ${output.output}`);
+        });
+      }
+      if (event == 'assistant-completed') {
+        const step_details = data.runSteps.step_details[data.runSteps.step_details.type]
+        if (data.runSteps.step_details.type === 'tool_calls') {
+          // output a nice table of the tool calls
+          step_details.forEach((detail: any) => {
+            detail.function = `${detail.function.name}(${detail.function.arguments ? detail.function.arguments : ''
+              }) => ${detail.output}`;
+            delete detail.id;
+            delete detail.type;
+          });
+          console.table(step_details);
+        }
+        aRunObj.usages.push(data.runSteps.usage);
+      }
+    });
+
+    try {
+      const parsedResponse = JSON.parse(ret);
+      if (parsedResponse.show_file) {
+        aRunObj.state.file_name = parsedResponse.show_file;
+        aRunObj.state.file_contents = fs.readFileSync(parsedResponse.show_file, 'utf8');
+      } else {
+        aRunObj.state.file_name = '';
+        aRunObj.state.file_contents = '';
+      }
+      if (parsedResponse.ai_chat) {
+        console.log(parsedResponse.ai_chat);
+      }
+    } catch (e) {
+    }
+    if (aRunObj.state.status === 'complete' || aRunObj.state.status === 'idle' || parseInt(aRunObj.state.percent_complete) === 100) {
+      console.table(aRunObj.usages);
+      console.table(aRunObj.state);
+      aRunObj.persist('done');
+      aRunObj.stopSpinner();
+      CommandProcessor.rl.prompt();
+    } else {
+      CommandProcessor.rl.prompt();
+    }
     CommandProcessor.taskQueue.splice(CommandProcessor.taskQueue.indexOf(aRunObj), 1);
     return aRunObj;
   }
-  spinState = {
-    frames: [
-      // "🌑 ",
-      // "🌒 ",
-      // "🌓 ",
-      // "🌔 ",
-      // "🌕 ",
-      // "🌖 ",
-      // "🌗 ",
-      // "🌘 "
-      "◟", "◡", "◞", "◝", "◠", "◜", "◟", "◡", "◞", "◝", "◠", "◜"
-    ],
-    currentIndex: 0,
-    timer: null,
-    spinning: false,
-    interval: 120,
-  }
+  frames = [
+    // "🌑 ",
+    // "🌒 ",
+    // "🌓 ",
+    // "🌔 ",
+    // "🌕 ",
+    // "🌖 ",
+    // "🌗 ",
+    // "🌘 "
+    "◟", "◡", "◞", "◝", "◠", "◜", "◟", "◡", "◞", "◝", "◠", "◜"
+  ]
+  currentIndex = 0
+  spinning = false
+  interval =120
   renderFrame(frame: any) {
     readline.clearLine(process.stdout, 0); // Clear the entire line
     readline.cursorTo(process.stdout, 0); // Move the cursor to the beginning of the line
     process.stdout.write(`${frame}\r`); // Write the frame and title
   }
   startSpinner() {
-    this.spinState.spinning = true;
+    this.spinning = true;
     this.timer = setInterval(() => {
-      const frame = this.spinState.frames[this.spinState.currentIndex];
+      const frame = this.frames[this.currentIndex];
       this.renderFrame(frame);
-      this.spinState.currentIndex = (this.spinState.currentIndex + 1) % this.spinState.frames.length;
-    }, this.spinState.interval);
+      this.currentIndex = (this.currentIndex + 1) % this.frames.length;
+    }, this.interval);
   }
   stopSpinner() {
-    if (this.spinState.timer) {
-      this.spinState.spinning = false;
-      clearInterval(this.spinState.timer);
-      this.spinState.timer = null;
+    if (this.timer) {
+      this.spinning = false;
+      clearInterval(this.timer);
+      this.timer = null;
       readline.clearLine(process.stdout, 0); // Clear the line
       readline.cursorTo(process.stdout, 0); // Move the cursor to the beginning of the line
       process.stdout.write('\n');
     }
   }
   success(message: string) {
-    if (this.spinState.timer) {
-      this.spinState.spinning = false;
-      clearInterval(this.spinState.timer);
-      this.spinState.timer = null;
+    if (this.timer) {
+      this.spinning = false;
+      clearInterval(this.timer);
+      this.timer = null;
       readline.clearLine(process.stdout, 0); // Clear the line
       readline.cursorTo(process.stdout, 0); // Move the cursor to the beginning of the line
       process.stdout.write(`\n✔ ${message}\n`);
     }
   }
+  persist( message: any) {
+    process.stdout.write(`✔ ${message}\r\n`); // Write the message to stdout with an icon and start a new line
+  }
   async runAssistant(content: string, onEvent: any): Promise<string> {
     this.startSpinner();
 
-
-  // get the latest message in the thread
-  const getLatestMessage = async (threadId: any, retries = 3) => {
-    let wetry = 0;
-    const _ = async (): Promise<any> => {
-      try {
-        if (threadId) {
-          const messages = await openai.beta.threads.messages.list(threadId);
-          return messages.data[messages.data.length - 1].content;
-        } else throw new Error('No threadId provided');
-      } catch (error) {
-        if (wetry < retries) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          wetry++;
-          return _();
-        }
-      }
-    }
-    const rval = (await _())[0].text.value;
-    return rval.replace(/\\n/g, '');
-  }
-
-  // wait for the rate limit to be lifted
-  const waitIfRateLimited = async (onEvent: any) => {
-    if (!this.run) return false;
-    if (!this.run.last_error) return false;
-    if (this.run.last_error && this.run.last_error.indexOf && this.run.last_error.indexOf('rate limited') !== -1) {
-      const waitTime = (
-        parseInt(this.run.last_error.match(/(\d+)m(\d+)/)[1]) * 60 + parseInt(this.run.last_error.match(/(\d+)m(\d+)/)[2]) + 1) * 1000;
-      onEvent('rate-limited', { waitTime });
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-      return true;
-    } else return false;
-  }
-
-    const createMessage = async (threadId: string, content: string) => {
-      return withRetriesAndTimeouts(async () => {
-        return await openai.beta.threads.messages.create(threadId, { role: "user", content });
-      });
-    }
-
-    const createThread = async () => {
-      return withRetriesAndTimeouts(async () => {
-        return await openai.beta.threads.create();
-      });
-    }
-
-    const loadThread = async (threadId: string) => {
-      return withRetriesAndTimeouts(async () => {
-        return await openai.beta.threads.retrieve(threadId);
-      })
-    }
-
-    const createRun = async (assistantId: string, threadId: string) => {
-      return withRetriesAndTimeouts(async () => {
-        return await openai.beta.threads.runs.create(threadId, { assistant_id: assistantId });
-      });
-    }
-
-    const retrieveRun = async (threadId: string, runId: string) => {
-      return withRetriesAndTimeouts(async () => {
-        return await openai.beta.threads.runs.retrieve(threadId, runId);
-      });
-    }
-
-    const listRunSteps = async (threadId: string, runId: string) => {
-      return withRetriesAndTimeouts(async () => {
-        return await openai.beta.threads.runs.steps.list(threadId, runId);
-      });
-    }
-
-    const retrieveRunSteps = async (threadId: string, runId: string, stepId: string) => {
-      return withRetriesAndTimeouts(async () => {
-        return await openai.beta.threads.runs.steps.retrieve(threadId, runId, stepId);
-      });
-    }
-
-    const modifyRun = async (threadId: string, runId: string, data: string) => {
-      return withRetriesAndTimeouts(async () => {
-        return await openai.beta.threads.runs.update(threadId, runId, data);
-      });
-    }
-
-    const cancelRun = async (threadId: string, runId: string) => {
-      return withRetriesAndTimeouts(async () => {
-        return await openai.beta.threads.runs.cancel(threadId, runId);
-      });
-    }
-
     // create or load the assistant
-    this.assistant = await createAssistant(config.assistantId, '', developerToolbox, config);
+    this.assistant = await getOrCreateAssistant(config.assistantId, {
+      instructions: developerToolbox.prompt,
+      name: 'assistant',
+      tools: Object.keys(this.toolbox.schemas).map((schemaName) => this.toolbox.schemas[schemaName as any]),
+      model: 'gpt-4-turbo-preview'
+    });
     config.assistantId = this.assistant.id;
     saveConfig(config);
     onEvent('assistant-created', { assistantId: config.assistantId });
 
-    // create a new thread with the assistant
-    const createOrLoadThread = async (config: any): Promise<any> => {
-      let thread;
-      if (!config.threadId) {
-        thread = await createThread();
-      } else {
-        try {
-          thread = await loadThread(config.threadId);
-          config.threadId = thread.id;
-          saveConfig(config);
-          onEvent('thread-created', { threadId: config.threadId });
-          return thread;
-        } catch (e) {
-          if (config.threadId) {
-            delete config.threadId;
-            saveConfig(config);
-            return createOrLoadThread(config);
-          } else throw e;
-        }
-      }
-    }
-    this.thread = await createOrLoadThread(config);
+    this.thread = await getOrCreateThread(config);
 
     async function createMessageWithRunCancel(threadId: string, content: string) {
       try {
@@ -385,7 +522,7 @@ class AssistantRun {
       // if the run has failed, we set the latest message to the error message
       if (this.run.status === "failed") {
         this.status = 'failed';
-        if (await waitIfRateLimited(onEvent)) return loop();
+        if (await waitIfRateLimited(this.run)) return loop();
         this.latestMessage = 'failed run: ' + this.run.last_error || this.latestMessage;
         onEvent('assistant-failed', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, message: this.latestMessage });
         return this.latestMessage;
@@ -416,7 +553,7 @@ class AssistantRun {
           this.run = await retrieveRun(this.thread.id, this.run.id);
           this.run_steps = await listRunSteps(this.thread.id, this.run.id);
           onEvent('assistant-in-progress', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, runSteps: this.run_steps });
-          if (await waitIfRateLimited(onEvent)) return loop();
+          if (await waitIfRateLimited(this.run)) return loop();
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
         return loop();
@@ -441,14 +578,25 @@ class AssistantRun {
       for (const key in json) {
         this.state[key] = json[key];
       }
-    } catch (e) {
-      console.log('parse error', response);
-    }
+      if(this.state.show_file) {
+        this.file_name = this.state.show_file;
+        this.file_contents = fs.readFileSync(this.state.show_file, 'utf8');
+      }
+      if(this.state.ai_chat) {
+        console.log(this.state.ai_chat);
+      }
+      if(this.state.current_task != this.state.last_task) {
+        this.state.last_task = this.state.current_task;
+        if(this.state.last_task) {
+          this.persist(`Task: ${this.state.current_task}`);
+        }
+      }
+    } catch (e) { console.log('parse error', response); }
+
     this.stopSpinner();
 
     return response;
   }
-
   // execute the tools
   async execTools(toolCalls: any, availableFunctions: any, onEvent: any, state: any) {
     let toolOutputs = [];
@@ -491,67 +639,6 @@ class AssistantRun {
       }
     }
     return toolOutputs;
-  }
-
-  async _run(command: any) {
-    const input_vars: any = {
-      requirements: '',
-      current_task: this.state.current_task || '',
-      percent_complete: this.state.percent_complete,
-      ai_notes: this.state.ai_notes,
-      user_chat: command,
-      ai_chat: '',
-    }
-    if (this.file_contents) {
-      input_vars.file_name = this.file_name;
-      input_vars.file_contents = this.file_contents;
-    }
-
-    let ret = await this.runAssistant(JSON.stringify(input_vars), (event: any, data: any) => {
-      if (event === 'exec-tools') {
-        data.toolOutputs.forEach((output: any) => {
-          const func = data.toolCalls.find((call: any) => call.id === output.tool_call_id).function.name;
-          console.log(`$ ${func} (${func.arguments ? func.arguments : ''}) => ${output.output}`);
-        });
-      }
-      if (event == 'assistant-completed') {
-        const step_details = data.runSteps.step_details[data.runSteps.step_details.type]
-        if (data.runSteps.step_details.type === 'tool_calls') {
-          // output a nice table of the tool calls
-          step_details.forEach((detail: any) => {
-            detail.function = `${detail.function.name}(${detail.function.arguments ? detail.function.arguments : ''
-              }) => ${detail.output}`;
-            delete detail.id;
-            delete detail.type;
-          });
-          console.table(step_details);
-        }
-        this.usages.push(data.runSteps.usage);
-      }
-    });
-
-    try {
-      const parsedResponse = JSON.parse(ret);
-      if (parsedResponse.show_file) {
-        this.file_name = parsedResponse.show_file;
-        this.file_contents = fs.readFileSync(parsedResponse.show_file, 'utf8');
-      } else {
-        this.file_name = '';
-        this.file_contents = '';
-      }
-      if (parsedResponse.ai_chat) {
-        console.log(parsedResponse.ai_chat);
-      }
-    } catch (e) {
-    }
-    if (this.state.status === 'complete' || this.state.status === 'idle' || parseInt(this.state.percent_complete) === 100) {
-      console.table(this.usages);
-      console.table(this.state);
-      this.success('done');
-      CommandProcessor.rl.prompt();
-    } else {
-      CommandProcessor.rl.prompt();
-    }
   }
 }
 
@@ -694,31 +781,27 @@ ALWAYS:
     percent_complete: 0,
     status: 'idle',
     tasks: [],
-    current_task: null,
+    current_task: '',
     ai_notes: 'no AI notes.',
   },
   tools: {
-    getset_state: function ({ name, value }: any, state: any) { if (value === undefined) delete state[name]; else { state[name] = value; } return JSON.stringify(state[name]) },
+    getset_state: function ({ name, value }: any, state: any) { if (value === undefined) delete state[name]; else { state[name] = value; } return `${name} => ${JSON.stringify(state[name])}` },
     getset_states: function ({ values }: any, state: any) { for (const name in values) { if (values[name] === undefined) delete state[name]; else { state[name] = values[name]; } } return JSON.stringify(state) },
     tasks_advance: function (_: any) { developerToolbox.state.tasks.shift(); developerToolbox.state.current_task = developerToolbox.state.tasks[0]; console.log('task advanced to:' + developerToolbox.state.current_task); console.log(developerToolbox.state.current_task); return developerToolbox.state.current_task },
-    error: function ({ message }: any) { console.error(message); return message },
-    log: function ({ message }: any) { console.log(message); return message },
     generate_tool: async function ({ requirements }: any, state: any) {
-      // const ar = new AssistantRunner(toolmakerToolbox, 'toolmaker');
-      // const _ = async (): Promise<any> => {
-      //   await ar.runAssistant(requirements, (event: any, data: any) => { });
-      //   if (toolmakerToolbox.state.complete) { return 'tool generated'; }
-      //   else return _();
-      // }
-      // return _();
+      const tool = await AssistantRun.createRun(
+        requirements, 
+        toolmakerToolbox, 
+        (command: any, run: any) => {},
+        (event: any, data: any) => {}
+      );
+      return tool;
     },
   },
   schemas: [
     { type: 'function', function: { name: 'getset_state', description: 'Get or set a named variable\'s value. Call with no value to get the current value. Call with a value to set the variable. Call with null to delete it.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'The variable\'s name. required' }, value: { type: 'string', description: 'The variable\'s new value. If not present, the function will return the current value' } }, required: ['name'] } } },
     { type: 'function', function: { name: 'getset_states', description: 'Get or set the values of multiple named variables. Call with no values to get the current values. Call with values to set the variables. Call with null to delete them.', parameters: { type: 'object', properties: { values: { type: 'object', description: 'The variables to get or set', properties: { name: { type: 'string', description: 'The variable\'s name' }, value: { type: 'string', description: 'The variable\'s new value. If not present, the function will return the current value' } }, required: ['name'] } }, required: ['values'] } } },
     { type: 'function', function: { name: 'tasks_advance', description: 'Advance the task to the next task' } },
-    { type: 'function', function: { name: 'error', description: 'Log an error', parameters: { type: 'object', properties: { message: { type: 'string', description: 'The error message' } }, required: ['message'] } } },
-    { type: 'function', function: { name: 'log', description: 'Log a log', parameters: { type: 'object', properties: { message: { type: 'string', description: 'The error message' } }, required: ['message'] } } },
     { type: 'function', function: { name: 'generate_tool', description: 'Generate an assistant tool that will fulfill the given requirements. ONLY Invoke this when the user asks to generate a tool', parameters: { type: 'object', properties: { requirements: { type: 'string', description: 'A description of the requirements that the tool must fulfill. Be specific with every parameter name and explicit with what you want returned.' } }, required: ['message'] } } },
   ]
 };
@@ -801,31 +884,30 @@ IMPORTANT:
 
 class CommandProcessor {
 
-  toolCALLs = [];
-  toolOutputs = [];
-  config = {};
-  tools = {};
-  schemas = {};
-
+  config: any = {};
   status = 'idle';
   commandQueue: any = [];
   static taskQueue: any = [];
   commandHandlers: any = {};
+  static assistantRunner: AssistantRunner;
 
-  assistantRunner: AssistantRunner;
   static rl: any;
+  get activeTask() {
+    return CommandProcessor.taskQueue[0];
+  }
+
+
   constructor() {
     // create the readline interface
     CommandProcessor.rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
-      //prompt: `${process.cwd()} > `,
-      prompt: ``,
+      prompt: `>`,
     });
 
     // load the config file
     if (fs.existsSync(path.join(process.cwd(), 'config.json'))) {
-      this.config = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'config.json')));
+      this.config = loadConfig();
     } else {
       this.config = {
         OPENAI_API_KEY: process.env.OPENAI_API_KEY,
@@ -837,79 +919,13 @@ class CommandProcessor {
         GOOGLE_CX_ID: process.env.GOOGLE_CX_ID,
         NEWS_API_KEY: process.env.NEWS_API_KEY,
       };
-      fs.writeFileSync(path.join(process.cwd(), 'config.json'), JSON.stringify(this.config));
+      saveConfig(this.config);
     }
 
-    this.assistantRunner = new AssistantRunner(config.assistantId);
+    CommandProcessor.assistantRunner = new AssistantRunner(AssistantRun.createToolbox(appDir), this.config.assistantId);
 
     CommandProcessor.taskQueue = [];
-    this.commandHandlers = {
-      'quit': () => process.exit(),
-      'clear': () => {
-        process.stdout.write('\x1Bc');
-        CommandProcessor.rl.prompt();
-      },
-      'env': async (command: string) => {
-        const [_, key, value] = command.split(' ');
-        if (key && value) {
-          process.env[key] = value;
-          CommandProcessor.rl.prompt();
-        }
-      },
-      'reset': async (_: string) => {
-        delete config.assistantId;
-        delete config.threadId;
-        delete config.runId;
-        saveConfig(config);
-        this.assistantRunner = new AssistantRunner(developerToolbox);
-        config.assistantId = this.assistantRunner.id;
-        saveConfig(config);
-        CommandProcessor.rl.prompt();
-      },
-      'echo': async (echo: string) => {
-        console.log(echo);
-      },
-      '*': async (command: string, run: any) => { // Make sure this is marked as async
-        if (this.status === 'working') {
-          return command;
-        }
-
-        // read all the contents of the ./tools folder
-        config.assistantId = this.assistantRunner.id;
-        saveConfig(config);
-
-            // check for a ./tools directory
-        // if the appDir ends with a bin directory, we need to go up one more level
-        const appDirParts = appDir.split(path.sep);
-        if (appDirParts[appDirParts.length - 1] === 'bin') {
-          appDirParts.pop();
-          appDir = appDirParts.join(path.sep);
-        }
-        const toolsFolder = path.join(appDir, 'tools')
-        if (fs.existsSync(toolsFolder)) {
-          const files = fs.readdirSync(toolsFolder);
-          files.forEach((file: any) => {
-            const tool = require(path.join(appDir, 'tools', file));
-            run.tools = { ...developerToolbox.tools, ...tool.tools };
-            run.schemas = [...developerToolbox.schemas, ...tool.schemas];
-            run.state = { ...developerToolbox.state, ...tool.state };
-          });
-          Object.keys(developerToolbox.tools).forEach((key) => {
-            run.tools[key] = run.tools[key].bind(this);
-          });
-        } else {
-          // create the ./tools directory
-          fs.mkdirSync(path.join(appDir, 'tools'));
-        }
-
-        return AssistantRun.createRun(command, developerToolbox, (event: string, data: any) => {
-
-        });
-      }
-    };
-
-
-    this.getCommandHandler = this.getCommandHandler.bind(this);
+    
     this.initAssistant = this.initAssistant.bind(this);
     this.initializeReadline = this.initializeReadline.bind(this);
     this.handleLine = this.handleLine.bind(this);
@@ -919,7 +935,6 @@ class CommandProcessor {
       this.initializeReadline();
       this.startQueueMonitor();
       console.log('ready');
-      //setTimeout(()=> this.commandQueue.push(() => this.getCommandHandler('greet')()), 1000);
     })
   }
 
@@ -933,41 +948,13 @@ class CommandProcessor {
   }
 
   async initAssistant() {
-    let itry = 0;
-    const cleanup = async () => {
-      try {
-        const assistants = (await openai.beta.assistants.list()).data
-        const rlAssistants = assistants.filter((assistant: any) => assistant.name === 'assistant');
-        const toolmakerAssistants = assistants.filter((assistant: any) => assistant.name === 'toolmaker');
-        const toDelete = [...rlAssistants, ...toolmakerAssistants];
-        if (toDelete.length > 0)
-          await Promise.all(toDelete.map((assistant) => openai.beta.assistants.del(assistant.id)));
-      } catch (error) {
-        // wait 1 second
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        // try again
-        if (itry < 3) {
-          await cleanup();
-          itry++;
-        }
-      }
-    }
-    await cleanup();
-    itry = 0;
-    let assistant;
-    const createAssistant = async () => {
-      try {
-        assistant = AssistantRunner.createAssistantFromPersona(developerToolbox, 'assistant');
-      } catch (error) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        if (itry < 3) {
-          console.log('retrying createAssistant...');
-          await createAssistant();
-          itry++;
-        }
-      }
-    }
-    return createAssistant();
+    const toolbox = AssistantRun.createToolbox(appDir);
+    return getOrCreateAssistant(config.assistantId, {
+      instructions: toolbox.prompt,
+      name: 'assistant',
+      tools: Object.keys(toolbox.schemas).map((schemaName) => toolbox.schemas[schemaName as any]),
+      model: 'gpt-4-turbo-preview'
+    });
   }
 
   initializeReadline() {
@@ -979,37 +966,40 @@ class CommandProcessor {
       });
     }).on('close', async () => {
       // cancel the assistant run
-      if (await CommandProcessor.cancel())
-        console.log('bye');
-      CommandProcessor.cancel();
-      CommandProcessor.rl.prompt();
+      if (await CommandProcessor.cancel() && CommandProcessor.taskQueue.length > 0) {
+        console.log('cancelled');
+        CommandProcessor.rl.prompt();
+      }
+      else {
+        console.log('goodbye');
+        process.exit(0);
+      }
     });
   }
 
   async handleLine(line: string) {
-    const commandHandler = this.getCommandHandler(line);
+    const commandHandler = AssistantRun.getCommandHandler(line, this);
     if (commandHandler) {
-      this.commandQueue.push(commandHandler);
+      this.commandQueue.push({
+        command: line,
+        commandHandler: commandHandler,
+      });
     } else {
       console.log('Invalid command');
     }
   }
 
-  getCommandHandler(command: string) {
-    if (this.commandHandlers[command]) {
-      return () => this.commandHandlers[command](command);
-    } else if (this.commandHandlers['*']) {
-      return () => this.commandHandlers['*'](command);
-    }
-    return null;
-  }
-
   async startQueueMonitor() {
     setInterval(async () => {
       if (this.commandQueue.length > 0) {
-        const command = this.commandQueue.shift();
+        const { command, commandHandler } = this.commandQueue.shift();
         try {
-          command && await (command as any)();
+          return AssistantRun.createRun(
+            command,
+            AssistantRun.createToolbox(appDir),
+            commandHandler, 
+            (event: string, data: any) => {
+          });
         } catch (error: any) {
           console.error(`Error executing command: ${error.message}`);
           // Correctly refer to `this` within the arrow function
@@ -1028,42 +1018,6 @@ class CommandProcessor {
     if (message) console.error(`${message}`); // Log the error message
     CommandProcessor.rl.prompt(); // Re-display the prompt
   }
-
-  persist(icon: any, message: any) {
-    process.stdout.write(`${icon} ${message}\r\n`); // Write the message to stdout with an icon and start a new line
-  }
-}
-
-async function createAssistant(assistantId: string, name: string, toolbox: any, config: any, retries = 3) {
-  if (!name && !config.assistantName) {
-    config.ASSISTANT_NAME = generateUsername("", 0, 24);
-    saveConfig(config);
-  }
-  let wetry = 0;
-  name = name || config.ASSISTANT_NAME;
-  const _ = async (): Promise<any> => {
-    try {
-      if (assistantId) {
-        try {
-          return openai.beta.assistants.retrieve(assistantId);
-        } catch (e) {
-          return AssistantRunner.createAssistantFromPersona(toolbox, name + generateUsername("", 0, 8, "-"));
-        }
-      }
-      else { return AssistantRunner.createAssistantFromPersona(toolbox, name + generateUsername("", 0, 8, "-")); }
-    } catch (e) {
-      if (wetry < retries) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        wetry++;
-        return _();
-      }
-      throw e;
-    }
-  }
-  const assistant = await _();
-  config.assistantId = assistant.id;
-  saveConfig(config);
-  return assistant;
 }
 
 new CommandProcessor();

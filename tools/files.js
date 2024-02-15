@@ -15,7 +15,7 @@ module.exports = {
         { "type": "function", "function": {"name": "file_attach", "description": "attach a file to the assistant to make it available to the assistant [c, cpp, csv, docx, html, java, json, md, pdf, php, pptx, py, rb, tex, txt, css, jpeg, jpg, js, gif, png, tar, ts, xlsx, xml, zip] only", "parameters": {"type": "object", "properties": {"path": {"type": "string", "description": "The path to the file to attach"}}, "required": ["path"]}}},
         { "type": "function", "function": {"name": "file_list_attached", "description": "list the files attached to the assistant for thread with thread_id", "parameters": {"type": "object", "properties": {"thread_id": {"type": "string", "description": "The thread_id of the assistant"}}}}},
         { "type": 'function', "function": { "name": 'get_file_tree', "description": 'Return a tree of files and folders `n` levels deep from the specified `path`.', "parameters": { "type": 'object', "properties": { "value": { "type": 'string', "description": 'The directory path from which to start the exploration.' }, n: { "type": 'number', "description": 'The depth of exploration.' } }, "required": ['path', 'n'] } } },
-        { "type": "function", "function": {"name": "file", "description": "Read, write, modify, and delete a file on the system. Supported operations are read, append, prepend, replace, insert_at, remove, delete, and copy.", "parameters": {"type": "object", "properties": {"operation": {"type": "string", "description": "The operation to perform on the file. Supported operations are read, append, prepend, replace, insert_at, remove, delete, and copy."}, "path": {"type": "string", "description": "The path to the file to perform the operation on."}, "match": {"type": "string", "description": "The string to match in the file. Regular expressions are supported."}, "data": {"type": "string", "description": "The data to write to the file."}, "position": {"type": "number", "description": "The position at which to perform the operation."}, "target": {"type": "string", "description": "The path to the target file."}}, "required": ["operation", "path"]}}},
+        { "type": "function", "function": {"name": "file", "description": "Read, write, modify, and delete a file on the system. Supported operations are read, write, append, prepend, replace, insert_at, remove, delete, and copy.", "parameters": {"type": "object", "properties": {"operation": {"type": "string", "description": "The operation to perform on the file. Supported operations are read, append, prepend, replace, insert_at, remove, delete, and copy."}, "path": {"type": "string", "description": "The path to the file to perform the operation on."}, "match": {"type": "string", "description": "The string to match in the file. Regular expressions are supported."}, "data": {"type": "string", "description": "The data to write to the file."}, "position": {"type": "number", "description": "The position at which to perform the operation."}, "target": {"type": "string", "description": "The path to the target file."}}, "required": ["operation", "path"]}}},
     ],
     tools: {
         file: async function ({ operation, path, match, data, position, target }) {
@@ -27,6 +27,9 @@ module.exports = {
                 switch (operation) {
                     case 'read':
                         return text;
+                    case 'write':
+                        text += data;
+                        break;
                     case 'append':
                         text += data;
                         break;
