@@ -186,27 +186,31 @@ var getOrCreateThread = function (config) { return __awaiter(void 0, void 0, voi
         return [2 /*return*/, withRetriesAndTimeouts(function () { return __awaiter(void 0, void 0, void 0, function () {
                 var thread;
                 return __generator(this, function (_a) {
-                    if (!config.threadId) {
-                        thread = openai.beta.threads.create();
-                        config.threadId = thread.id;
-                        saveConfig(config);
-                        return [2 /*return*/, thread];
-                    }
-                    else {
-                        try {
-                            return [2 /*return*/, openai.beta.threads.retrieve(config.threadId)];
-                        }
-                        catch (e) {
-                            if (config.threadId) {
-                                delete config.threadId;
-                                saveConfig(config);
-                                return [2 /*return*/, getOrCreateThread(config)];
+                    switch (_a.label) {
+                        case 0:
+                            if (!!config.threadId) return [3 /*break*/, 2];
+                            return [4 /*yield*/, openai.beta.threads.create()];
+                        case 1:
+                            thread = _a.sent();
+                            config.threadId = thread.id;
+                            saveConfig(config);
+                            return [2 /*return*/, thread];
+                        case 2:
+                            try {
+                                return [2 /*return*/, openai.beta.threads.retrieve(config.threadId)];
                             }
-                            else
-                                throw e;
-                        }
+                            catch (e) {
+                                if (config.threadId) {
+                                    delete config.threadId;
+                                    saveConfig(config);
+                                    return [2 /*return*/, getOrCreateThread(config)];
+                                }
+                                else
+                                    throw e;
+                            }
+                            _a.label = 3;
+                        case 3: return [2 /*return*/];
                     }
-                    return [2 /*return*/];
                 });
             }); })];
     });
@@ -373,10 +377,15 @@ var AssistantRunner = /** @class */ (function () {
         this.toolbox = toolbox;
     }
     AssistantRunner.prototype.destroy = function () {
+        var _this = this;
         if (this.run && this.thread) {
-            openai.beta.threads.runs.cancel(this.thread.id, this.run.id);
+            openai.beta.threads.runs.cancel(this.thread.id, this.run.id).then(function () {
+                openai.beta.assistants.del(_this.assistant.id);
+            });
         }
-        openai.beta.assistants.del(this.assistant.id);
+        else {
+            openai.beta.assistants.del(this.assistant.id);
+        }
     };
     // request a cancellation of the run
     AssistantRunner.prototype.requestCancel = function () {
@@ -484,26 +493,31 @@ var AssistantRun = /** @class */ (function () {
                         }
                         return [4 /*yield*/, aRunObj.runAssistant(JSON.stringify(input_vars), function (event, data) {
                                 if (event === 'exec-tools') {
+                                    var fouts_1 = [];
                                     data.toolOutputs.forEach(function (output) {
                                         var func = data.toolCalls.find(function (call) { return call.id === output.tool_call_id; }).function.name;
-                                        var fout = {
+                                        fouts_1.push({
                                             function: func,
                                             arguments: data.toolCalls.find(function (call) { return call.id === output.tool_call_id; }).function.arguments,
-                                            output: output.output
-                                        };
-                                        console.table([fout]);
+                                            output: '...'
+                                        });
                                     });
+                                    console.log('\nexecuting tools');
+                                    console.table(fouts_1);
                                 }
                                 if (event == 'assistant-completed') {
                                     var step_details = data.runSteps.step_details[data.runSteps.step_details.type];
                                     if (data.runSteps.step_details.type === 'tool_calls') {
-                                        // output a nice table of the tool calls
+                                        var fouts_2 = [];
                                         step_details.forEach(function (detail) {
-                                            detail.function = "".concat(detail.function.name, "(").concat(detail.function.arguments ? detail.function.arguments : '', ") => ").concat(detail.output);
-                                            delete detail.id;
-                                            delete detail.type;
+                                            fouts_2.push({
+                                                function: detail.function.name,
+                                                arguments: detail.function.arguments,
+                                                output: detail.output ? detail.output.slice(0, 100) + '...' : 'no output'
+                                            });
                                         });
-                                        console.table(step_details);
+                                        console.log('\nexecuting tools');
+                                        console.table(fouts_2);
                                     }
                                     aRunObj.usages.push(data.runSteps.usage);
                                 }
@@ -544,6 +558,7 @@ var AssistantRun = /** @class */ (function () {
                         });
                         if (parseInt(aRunObj.state.percent_complete) === 100) {
                             aRunObj.usages.push(usageSummary);
+                            console.log('\nusage summary');
                             console.table(aRunObj.usages);
                             console.table(aRunObj.state);
                             aRunObj.persist('done');
@@ -936,7 +951,7 @@ var AssistantRun = /** @class */ (function () {
     return AssistantRun;
 }());
 var developerToolbox = {
-    prompt: "You are a highly skilled agent operating in a command-line environment supported by a number of powerful tools, \nrecursive functions, and a vast array of knowledge. You are tasked with solving complex problems and creating tools to\nassist you in your work.\n\nINSTRUCTIONS: Use the below process and tools to perform the given requirements.\n\nWORKING WITH SYSTEM STATE: \n  GET and SET the state of any variable using the getset_state function. (You can also getset_states to getset multiple states at once)\n  When you see a GET, call getset_state(\"variable\") to get the value of the state.\n  When you see a SET, call getset_state(\"variable\", <value>) to set the value of the state.\n\nabout ECHO: When you see any ECHO instruction below, \n  SET ai_chat to the message you want to echo to the user\n\nIMPORTANT VARIABLES:\n- ai_chat: The chat messages (output)\n- user_chat: The user chat messages (input)\n- requirements: The requirements (input)\n- percent_complete: The percent complete (output)\n- status: The status (output)\n- tasks: The tasks to perform (input, output)\n- current_task: The current task (input, output)\n- ai_notes: The current AI notes (input, output)\n\nPROCESS:\n\ncwd\nGET user_chat\n\nIF there are any messages,\n\n  FOR EACH message in user_chat,\n    ECHO a response to each message\n\n  perform adjustments to the requirements based on messages\n    GET requirements to read the requirements\n    adjust the requirements based on the messages\n      SET requirements to the new requirements\n      SET percent_complete to 0\n      ECHO a status to the user\n\n  SET current_task to 'decompose requirements'\n  EXIT\n\nGET requirements\n\nIF the requirements have changed\n\n  IF the new requirements can be performed in one session\n\n    DO THE WORK: Use the tools at your disposal to help you.\n      * Execute tasks required to meet the new requirements within this iteration. *\n\n    SET percent_complete to 100\n    SET status to complete\n    ECHO status to the user\n    EXIT\n\n  ELSE\n    SET requirements to the new requirements\n    SET current_task to 'decompose requirements'\n    ECHO an acknowledgement to the user, mirroring a summary of their request.\n    EXIT\n\nELSE IF GET current_task == 'decompose requirements'\n\n    Decompose the requirements into actionable tasks\n    SET tasks to the decomposed tasks\n    SET current_task to the first task\n    SET percent_complete to 2\n    SET ai_notes to leave notes and comments for continuity\n    ECHO a status to the user\n    EXIT\n\nELSE\n\n  SET status to 'working'\n  \n  DO THE WORK: Move the task forward using the tools at your disposal.\n  MAKE A TOOL: If you need a tool that doesn't exist, create it.\n  BE CREATIVE: Use your creativity to solve the problem.\n  \n  SET percent_complete to update the percent complete\n  SET ai_notes to leave notes and comments for continuity\n\n  IF the task is completed,\n    CALL tasks_advance to move to the next task\n\n  IF there is a next task,\n    EXIT\n\n  ELSE\n    SET status to 'complete'\n    ECHO a status to the user\n    EXIT\n\nON ERROR:\n  SET status to 'error'\n  CALL error to log the FULL TECHNICAL DETAILS of the error message\n  EXIT\n\nON WARNING:\n  SET status to 'warning'\n  CALL warn to log the warning message\n\nON EVERY RESPONSE:\n\nECHO a summary of what you did to the user.\n\nRESPOND with a JSON object WITH NO SURROUNDING CODEBLOCKS with the following fields:\n  requirements: The new requirements\n  percent_complete: The new percent complete\n  status: The new status\n  tasks: The new tasks\n  current_task: The new current task\n  ai_notes: The new AI notes\n  user_chat: The new user chat\n\nALWAYS:\n  \n ** USE codemod TOOL FOR ALL JAVASCRIPT AND TYPESCRIPT FILES. **\n \n  DECOMPOSE TASKS INTO DIRECT, ACTIONABLE STEPS. No 'research' or 'browser testing' tasks. Each task should be a direct action.\n  USE THE TOOLS: Use the tools at your disposal to help you.\n  BE RESOURCEFUL: Use all available resources to solve the problem.\n  MAKE NEW TOOLS: If you need a tool that doesn't exist, create it.\n  USE ABSOLUTE PATHS: Use absolute paths for all file operations.\n\n  *** REMEMBER TO CHAT WITH THE USER AND ECHO STATUS UPDATES TO THE USER ***\n\n  *** IMPORTANT: ALL YOUR OUTPUT SHOULD BE JSON FORMATTED WITHOUT ANY SURROUNDING CODE BLOCKS ***\n",
+    prompt: "***MASTER PAIR PROGRAMMER***\n\nYou are a highly skilled programmer collaborating with your partner in a command-line environment supported by a number of powerful tools, including the capacity to create and improve your own tooling, call yourself recursively functions, and perform higly complex tasks. You are tasked with deploying your vast array of knowledge towards solving complex problems and creating tools to assist you in your work.\n\n***INSTRUCTIONS***\n\nUse the tools to perform the given requirements. Build new tools as needed. Use the task management system to stay on track.\n\nYou have a number of tools at your disposal (documented elsewhere). Use those tools along with your knowledge to solve the problem. You can save any data you want to the system state, which will persist between calls. This gives you the capability to plan and execute complex tasks over multiple calls.\n\nYou also have a task management system at your disposal which will help you stay on track and keep the user informed of your progress. When you receive a complex task, first break it down into smaller, actionable steps. Then use the task management system to keep track of your progress.\n\n***WORKING WITH SYSTEM STATE***\n\n- GET and SET the state of any variable using the `getset_state` tool. You can also `getset_states` to getset multiple states at once.\n\n***IMPORTANT VARIABLES***\n\n- `ai_chat`: The chat messages (output)\n- `user_chat`: The user chat messages (input)\n- `requirements`: The requirements (input, output)\n- `percent_complete`: The percent complete (output)\n- `status`: The status (output)\n- `current_task`: The current task (input, output)\n- `ai_notes`: The current AI notes (input, output)\n\n***COMMUNICATING WITH THE USER***\n\n  SET the `ai_chat` state var to the chat messages you want to send to the user.\n  GET `user_chat` state var to read the chat messages from the user.\n\n***WORKING WITH TASKS***\n\n- decompose complex tasks into smaller, actionable steps. Each step should have a clear, direct action. Do not create abstract tasks like 'research' or 'browser testing'.\n- CALL `tasks_set` to set the tasks to the new tasks.\n- when you are done with a task, call `advance_task` to move to the next task and update the percent_complete.\n- when you are done with all tasks, set the status to 'complete' and the `percent_complete` to 100.\n\n***ON ERROR***\n\n- SET status to 'error'\n- CALL error to log the FULL TECHNICAL DETAILS of the error message\n- EXIT\n\n***ON WARNING***\n  SET status to 'warning'\n  CALL warn to log the warning message\n\n***ON EVERY RESPONSE***\n\n- SET the `ai_notes` state var to a summary of what you did.\n- SET the `ai_chat` state var to a summary of what you did to the user.\n\n***ON COMPLETION***\n\n- SET the `ai_notes` state var to a summary of what you did.\n- SET the `ai_chat` state var to a summary of what you did to the user.\n\n***REQUIREMENTS***\nRESPOND with a JSON object WITH NO SURROUNDING CODEBLOCKS with the following fields:\n  requirements: The new requirements\n  percent_complete: The new percent complete\n  status: The new status\n  current_task: The new current task\n  ai_notes: The new AI notes\n  ai_chat: The new ai chat\n  ",
     state: {
         requirements: 'no requirements set',
         percent_complete: 0,
@@ -966,7 +981,22 @@ var developerToolbox = {
             }
             return JSON.stringify(state);
         },
-        tasks_advance: function (_) { developerToolbox.state.tasks.shift(); developerToolbox.state.current_task = developerToolbox.state.tasks[0]; console.log('task advanced to:' + developerToolbox.state.current_task); console.log(developerToolbox.state.current_task); return developerToolbox.state.current_task; },
+        tasks_advance: function (_) { if (developerToolbox.state.tasks.length === 0) {
+            return 'no more tasks';
+        }
+        else {
+            developerToolbox.state.tasks.shift();
+            developerToolbox.state.current_task = developerToolbox.state.tasks[0];
+            console.log('task advanced to:' + developerToolbox.state.current_task);
+            return developerToolbox.state.current_task;
+        } },
+        tasks_set: function (_b) {
+            var tasks = _b.tasks;
+            developerToolbox.state.tasks = tasks;
+            developerToolbox.state.current_task = tasks[0];
+            return JSON.stringify(developerToolbox.state.tasks);
+        },
+        get_current_task: function (_) { return developerToolbox.state.current_task || 'no current task'; },
         generate_tool: function (_b, state) {
             var requirements = _b.requirements;
             return __awaiter(this, void 0, void 0, function () {
@@ -986,6 +1016,8 @@ var developerToolbox = {
         { type: 'function', function: { name: 'getset_state', description: 'Get or set a named variable\'s value. Call with no value to get the current value. Call with a value to set the variable. Call with null to delete it.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'The variable\'s name. required' }, value: { type: 'string', description: 'The variable\'s new value. If not present, the function will return the current value' } }, required: ['name'] } } },
         { type: 'function', function: { name: 'getset_states', description: 'Get or set the values of multiple named variables. Call with no values to get the current values. Call with values to set the variables. Call with null to delete them.', parameters: { type: 'object', properties: { values: { type: 'object', description: 'The variables to get or set', properties: { name: { type: 'string', description: 'The variable\'s name' }, value: { type: 'string', description: 'The variable\'s new value. If not present, the function will return the current value' } }, required: ['name'] } }, required: ['values'] } } },
         { type: 'function', function: { name: 'tasks_advance', description: 'Advance the task to the next task' } },
+        { type: 'function', function: { name: 'tasks_set', description: 'Set the tasks to the given tasks. Also sets the current task to the first task in the list', parameters: { type: 'object', properties: { tasks: { type: 'array', description: 'The tasks to set', items: { type: 'string' } } }, required: ['tasks'] } } },
+        { type: 'function', function: { name: 'get_current_task', description: 'Get the current task' } },
         { type: 'function', function: { name: 'generate_tool', description: 'Generate an assistant tool that will fulfill the given requirements. ONLY Invoke this when the user asks to generate a tool', parameters: { type: 'object', properties: { requirements: { type: 'string', description: 'A description of the requirements that the tool must fulfill. Be specific with every parameter name and explicit with what you want returned.' } }, required: ['message'] } } },
     ]
 };
@@ -1062,7 +1094,6 @@ var CommandProcessor = /** @class */ (function () {
         this.initAssistant().then(function () {
             _this.initializeReadline();
             _this.startQueueMonitor();
-            console.log('ready');
         });
     }
     Object.defineProperty(CommandProcessor.prototype, "activeTask", {
