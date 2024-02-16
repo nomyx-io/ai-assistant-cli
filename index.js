@@ -55,6 +55,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     }
     return to.concat(ar || Array.prototype.slice.call(from));
 };
+Object.defineProperty(exports, "__esModule", { value: true });
 var readline = require('readline');
 var OpenAI = require('openai');
 var fs = require('fs');
@@ -499,7 +500,7 @@ var AssistantRun = /** @class */ (function () {
                                         fouts_1.push({
                                             function: func,
                                             arguments: data.toolCalls.find(function (call) { return call.id === output.tool_call_id; }).function.arguments,
-                                            output: '...'
+                                            output: output.output.slice(0, 100) + '...'
                                         });
                                     });
                                     console.log('\nexecuting tools');
@@ -516,8 +517,9 @@ var AssistantRun = /** @class */ (function () {
                                                 output: detail.output ? detail.output.slice(0, 100) + '...' : 'no output'
                                             });
                                         });
-                                        console.log('\nexecuting tools');
+                                        var latestMessage = data.runSteps.step_details[data.runSteps.step_details.type].map(function (detail) { return detail.output.slice(0, 100) + '...'; }).join('\n');
                                         console.table(fouts_2);
+                                        console.log('\n' + latestMessage);
                                     }
                                     aRunObj.usages.push(data.runSteps.usage);
                                 }
@@ -690,102 +692,112 @@ var AssistantRun = /** @class */ (function () {
                         lastMessage = '';
                         onEvent('assistant-started', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id });
                         loop = function () { return __awaiter(_this, void 0, void 0, function () {
-                            var _b, _c, _d, _e, _f, _g, _h;
-                            return __generator(this, function (_j) {
-                                switch (_j.label) {
+                            var _b, _c, _d, _e, _f, _g, rs, _h, _j;
+                            return __generator(this, function (_k) {
+                                switch (_k.label) {
                                     case 0: return [4 /*yield*/, new Promise(function (resolve) { return setTimeout(resolve, 1000); })];
                                     case 1:
-                                        _j.sent();
+                                        _k.sent();
                                         _b = this;
                                         return [4 /*yield*/, retrieveRun(this.thread.id, this.run.id)];
                                     case 2:
-                                        _b.run = _j.sent();
+                                        _b.run = _k.sent();
                                         this.status = 'running';
                                         _c = this;
                                         return [4 /*yield*/, getLatestMessage(this.thread.id)];
                                     case 3:
-                                        _c.latestMessage = _j.sent();
+                                        _c.latestMessage = _k.sent();
                                         if (lastMessage !== this.latestMessage) {
                                             lastMessage = this.latestMessage;
                                         }
                                         onEvent('assistant-loop-start', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, message: this.latestMessage });
                                         if (!(this.run.status === "failed")) return [3 /*break*/, 5];
-                                        // x mark
-                                        process.stdout.write("\u2716\n");
+                                        process.stdout.write("\n\u274C");
                                         this.status = 'failed';
                                         return [4 /*yield*/, waitIfRateLimited(this.run)];
                                     case 4:
-                                        if (_j.sent())
+                                        if (_k.sent())
                                             return [2 /*return*/, loop()];
                                         this.latestMessage = 'failed run: ' + this.run.last_error || this.latestMessage;
                                         onEvent('assistant-failed', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, message: this.latestMessage });
                                         return [2 /*return*/, this.latestMessage];
                                     case 5:
                                         if (!(this.run.status === "cancelled")) return [3 /*break*/, 6];
-                                        // cancel mark
-                                        process.stdout.write("\u2716\n");
+                                        process.stdout.write("\n\u274C");
                                         this.status = 'cancelled';
                                         this.latestMessage = 'cancelled run';
                                         onEvent('assistant-cancelled', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id });
                                         return [2 /*return*/, this.latestMessage];
                                     case 6:
                                         if (!(this.run.status === "completed")) return [3 /*break*/, 9];
-                                        // check mark
-                                        process.stdout.write("\u2714\n");
+                                        process.stdout.write("\n\u2714");
                                         this.status = 'completed';
                                         _d = this;
                                         return [4 /*yield*/, listRunSteps(this.thread.id, this.run.id)];
                                     case 7:
-                                        _d.run_steps = _j.sent();
+                                        _d.run_steps = _k.sent();
                                         _e = this;
-                                        return [4 /*yield*/, retrieveRunSteps(this.thread.id, this.run.id, this.run_steps.data[this.run_steps.data.length - 1].id)];
+                                        return [4 /*yield*/, retrieveRunSteps(this.thread.id, this.run.id, this.run_steps.data[this.run_steps.length - 1].id)];
                                     case 8:
-                                        _e.run_steps = _j.sent();
+                                        _e.run_steps = _k.sent();
                                         onEvent('assistant-completed', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, runSteps: this.run_steps });
                                         // replace \n with new line
                                         return [2 /*return*/, this.latestMessage.replace(/\\n/g, '')];
                                     case 9:
-                                        if (!(this.run.status === "queued" || this.run.status === "in_progress")) return [3 /*break*/, 16];
-                                        _j.label = 10;
+                                        if (!(this.run.status === "queued" || this.run.status === "in_progress")) return [3 /*break*/, 18];
+                                        _k.label = 10;
                                     case 10:
-                                        if (!(this.run.status === "queued" || this.run.status === "in_progress")) return [3 /*break*/, 15];
-                                        // working mark
-                                        process.stdout.write("\u2699");
+                                        if (!(this.run.status === "queued" || this.run.status === "in_progress")) return [3 /*break*/, 17];
+                                        process.stdout.write("\u23F3");
                                         this.status = 'in-progress';
                                         _f = this;
                                         return [4 /*yield*/, retrieveRun(this.thread.id, this.run.id)];
                                     case 11:
-                                        _f.run = _j.sent();
+                                        _f.run = _k.sent();
                                         _g = this;
                                         return [4 /*yield*/, listRunSteps(this.thread.id, this.run.id)];
                                     case 12:
-                                        _g.run_steps = _j.sent();
-                                        onEvent('assistant-in-progress', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, runSteps: this.run_steps });
-                                        return [4 /*yield*/, waitIfRateLimited(this.run)];
+                                        _g.run_steps = _k.sent();
+                                        rs = this.run_steps.data[this.run_steps.data.length - 1];
+                                        if (!rs) return [3 /*break*/, 14];
+                                        _h = this;
+                                        return [4 /*yield*/, retrieveRunSteps(this.thread.id, this.run.id, this.run_steps.data[this.run_steps.data.length - 1].id)];
                                     case 13:
-                                        if (_j.sent())
+                                        _h.run_steps = _k.sent();
+                                        onEvent('assistant-in-progress', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, runSteps: this.run_steps });
+                                        // tool icon
+                                        if (rs.type === 'tool_calls') {
+                                            process.stdout.write("\uD83D\uDD27");
+                                        }
+                                        else {
+                                            process.stdout.write("\u23F3");
+                                        }
+                                        _k.label = 14;
+                                    case 14: return [4 /*yield*/, waitIfRateLimited(this.run)];
+                                    case 15:
+                                        if (_k.sent())
                                             return [2 /*return*/, loop()];
                                         return [4 /*yield*/, new Promise(function (resolve) { return setTimeout(resolve, 1000); })];
-                                    case 14:
-                                        _j.sent();
-                                        return [3 /*break*/, 10];
-                                    case 15: return [2 /*return*/, loop()];
                                     case 16:
-                                        if (!(this.run.status === "requires_action")) return [3 /*break*/, 19];
-                                        process.stdout.write("\u26A0");
+                                        _k.sent();
+                                        return [3 /*break*/, 10];
+                                    case 17: return [2 /*return*/, loop()];
+                                    case 18:
+                                        if (!(this.run.status === "requires_action")) return [3 /*break*/, 21];
+                                        process.stdout.write("\u2757");
                                         this.status = 'executing-tools';
                                         this.toolCalls = this.run.required_action.submit_tool_outputs.tool_calls;
-                                        _h = this;
+                                        _j = this;
                                         return [4 /*yield*/, this.execTools(this.toolCalls, this.toolbox.tools, onEvent, this.state)];
-                                    case 17:
-                                        _h.toolOutputs = _j.sent();
+                                    case 19:
+                                        _j.toolOutputs = _k.sent();
                                         onEvent('exec-tools', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, toolCalls: this.toolCalls, toolOutputs: this.toolOutputs });
                                         return [4 /*yield*/, openai.beta.threads.runs.submitToolOutputs(this.thread.id, this.run.id, { tool_outputs: this.toolOutputs })];
-                                    case 18:
-                                        _j.sent();
+                                    case 20:
+                                        _k.sent();
                                         onEvent('submit-tool-outputs', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, toolOutputs: this.toolOutputs });
                                         return [2 /*return*/, loop()];
-                                    case 19:
+                                    case 21:
                                         process.stdout.write("\r\n");
                                         return [2 /*return*/, loop()];
                                 }

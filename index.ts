@@ -1,3 +1,5 @@
+import { get } from "http";
+
 const readline = require('readline');
 const OpenAI = require('openai');
 const fs = require('fs');
@@ -385,7 +387,7 @@ class AssistantRun {
           fouts.push ({
             function: func,
             arguments: data.toolCalls.find((call: any) => call.id === output.tool_call_id).function.arguments,
-            output: '...'
+            output: output.output.slice(0, 100) + '...'
           });
         });
         console.log('\nexecuting tools')
@@ -402,8 +404,9 @@ class AssistantRun {
               output: detail.output ? detail.output.slice(0, 100) + '...' : 'no output'
             });
           });
-          console.log('\nexecuting tools')
+          const latestMessage = data.runSteps.step_details[data.runSteps.step_details.type].map((detail: any) => detail.output.slice(0, 100) + '...').join('\n');
           console.table(fouts);
+          console.log('\n' +latestMessage);
         }
         aRunObj.usages.push(data.runSteps.usage);
       }
@@ -567,8 +570,7 @@ class AssistantRun {
 
       // if the run has failed, we set the latest message to the error message
       if (this.run.status === "failed") {
-        // x mark
-        process.stdout.write(`✖\n`);
+        process.stdout.write(`\n❌`);
         this.status = 'failed';
         if (await waitIfRateLimited(this.run)) return loop();
         this.latestMessage = 'failed run: ' + this.run.last_error || this.latestMessage;
@@ -578,8 +580,7 @@ class AssistantRun {
 
       // if the run is cancelled, we set the latest message to 'cancelled run'
       else if (this.run.status === "cancelled") {
-        // cancel mark
-        process.stdout.write(`✖\n`);
+        process.stdout.write(`\n❌`);
         this.status = 'cancelled';
         this.latestMessage = 'cancelled run';
         onEvent('assistant-cancelled', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id });
@@ -588,25 +589,35 @@ class AssistantRun {
 
       // if the run is completed, we set the latest message to the last message in the thread
       else if (this.run.status === "completed") {
-        // check mark
-        process.stdout.write(`✔\n`);
+        process.stdout.write(`\n✔`);
         this.status = 'completed';
         this.run_steps = await listRunSteps(this.thread.id, this.run.id);
-        this.run_steps = await retrieveRunSteps(this.thread.id, this.run.id, this.run_steps.data[this.run_steps.data.length - 1].id);
+        const rs = this.run_steps.data[this.run_steps.data.length - 1].id;
+        if(rs) {
+          this.run_steps = await retrieveRunSteps(this.thread.id, this.run.id, rs);
+        }
         onEvent('assistant-completed', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, runSteps: this.run_steps });
-        // replace \n with new line
         return this.latestMessage.replace(/\\n/g, '');
       }
 
       // if the run is queued or in progress, we wait for the run to complete
       else if (this.run.status === "queued" || this.run.status === "in_progress") {
         while (this.run.status === "queued" || this.run.status === "in_progress") {
-          // working mark
-          process.stdout.write(`⚙`);
+          process.stdout.write(`⏳`);
           this.status = 'in-progress';
           this.run = await retrieveRun(this.thread.id, this.run.id);
           this.run_steps = await listRunSteps(this.thread.id, this.run.id);
-          onEvent('assistant-in-progress', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, runSteps: this.run_steps });
+          const rs = this.run_steps.data[this.run_steps.data.length - 1];
+          if(rs) {
+            this.run_steps = await retrieveRunSteps(this.thread.id, this.run.id, rs.id);
+            onEvent('assistant-in-progress', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, runSteps: this.run_steps });
+            // tool icon
+            if (rs.type === 'tool_calls') {
+              process.stdout.write(`🔧`);
+            } else {
+              process.stdout.write(`⏳`);
+            }
+          }
           if (await waitIfRateLimited(this.run)) return loop();
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
@@ -615,7 +626,7 @@ class AssistantRun {
 
       // if the run requires action, we execute the tools and submit the outputs
       else if (this.run.status === "requires_action") {
-        process.stdout.write(`⚠`);
+        process.stdout.write(`❗`);
         this.status = 'executing-tools';
         this.toolCalls = this.run.required_action.submit_tool_outputs.tool_calls;
         this.toolOutputs = await this.execTools(this.toolCalls, this.toolbox.tools, onEvent, this.state);
@@ -694,13 +705,13 @@ class AssistantRun {
 const developerToolbox = {
   prompt: `***MASTER PAIR PROGRAMMER***
 
-You are a highly skilled programmer collaborating with your partner in a command-line environment supported by a number of powerful tools, including the capacity to create and improve your own tooling, call yourself recursively functions, and perform higly complex tasks. You are tasked with deploying your vast array of knowledge towards solving complex problems and creating tools to assist you in your work.
+You are a highly skilled programmer collaborating with your partner in a command-line environment supported by a number of powerful tools, including the capacity to create and improve your own tooling, call yourself recursively functions, and perform highly complex tasks. 
+
+You are tasked by your pair coding partner with transforming the files in the current working folder and other specified folders to meet the requirements of the user. You have a number of tools at your disposal to help you accomplish this task.
 
 ***INSTRUCTIONS***
 
-Use the tools to perform the given requirements. Build new tools as needed. Use the task management system to stay on track.
-
-You have a number of tools at your disposal (documented elsewhere). Use those tools along with your knowledge to solve the problem. You can save any data you want to the system state, which will persist between calls. This gives you the capability to plan and execute complex tasks over multiple calls.
+Use the \`files\`, \`html_selector\`, \`execute_bash\`/\`execute_nodejs\`, and other tools to transform the files in the current working folder and other specified folders to meet the requirements of the user. You can save any data you want to the system state, which will persist between calls. This gives you the capability to plan and execute complex tasks over multiple calls.
 
 You also have a task management system at your disposal which will help you stay on track and keep the user informed of your progress. When you receive a complex task, first break it down into smaller, actionable steps. Then use the task management system to keep track of your progress.
 
@@ -718,10 +729,14 @@ You also have a task management system at your disposal which will help you stay
 - \`current_task\`: The current task (input, output)
 - \`ai_notes\`: The current AI notes (input, output)
 
-***COMMUNICATING WITH THE USER***
+***WORKING WITH THE SYSTEM***
 
-  SET the \`ai_chat\` state var to the chat messages you want to send to the user.
-  GET \`user_chat\` state var to read the chat messages from the user.
+Look at your tools and schemas to see what you can do. Examining your own capabilities is a crucial part of your job. You are rewarded for your creativity and resourcefulness, and so is your partner.
+
+***COMMUNICATING WITH YOUR PARTNER***
+
+  SET the \`ai_chat\` state var to the chat messages you want to send to your partner
+  GET \`user_chat\` state var to read the chat messages from your partner
 
 ***WORKING WITH TASKS***
 
