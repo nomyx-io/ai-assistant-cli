@@ -9,6 +9,7 @@ const execute_bash = async ({ command }) => {
             if (code === 0) {
                 resolve(stdout);
             } else {
+                
                 resolve(`${stdout}\n${stderr}`)
             }
         });

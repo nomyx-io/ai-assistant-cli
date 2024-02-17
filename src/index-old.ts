@@ -74,6 +74,8 @@ if (flags.indexOf('--help') !== -1) {
   process.exit(0);
 }
 
+const shorten = (str: any) => { if(!str) return ''; const l = str.length; str.slice(0, 100) + (l > 100 ? '...' : ''); return (str.length === 0 ? 'empty' : str )};
+
 async function withRetriesAndTimeouts(func: any, retries = 3, timeout = 1000) {
   let tryCount = 0;
   const _ = async (): Promise<any> => {
@@ -401,10 +403,10 @@ class AssistantRun {
             fouts.push({
               function: detail.function.name,
               arguments: detail.function.arguments,
-              output: detail.output ? detail.output.slice(0, 100) + '...' : 'no output'
+              output:shorten(detail.output)
             });
           });
-          const latestMessage = data.runSteps.step_details[data.runSteps.step_details.type].map((detail: any) => detail.output.slice(0, 100) + '...').join('\n');
+          const latestMessage = data.runSteps.step_details[data.runSteps.step_details.type].map((detail: any) => detail && detail.output && (shorten(detail.output.join('\n') + '\n')));
           console.table(fouts);
           console.log('\n' +latestMessage);
         }
@@ -570,7 +572,7 @@ class AssistantRun {
 
       // if the run has failed, we set the latest message to the error message
       if (this.run.status === "failed") {
-        process.stdout.write(`\n❌`);
+        process.stdout.write(`❌\r\n`);
         this.status = 'failed';
         if (await waitIfRateLimited(this.run)) return loop();
         this.latestMessage = 'failed run: ' + this.run.last_error || this.latestMessage;
@@ -580,7 +582,7 @@ class AssistantRun {
 
       // if the run is cancelled, we set the latest message to 'cancelled run'
       else if (this.run.status === "cancelled") {
-        process.stdout.write(`\n❌`);
+        process.stdout.write(`🛑\r\n`);
         this.status = 'cancelled';
         this.latestMessage = 'cancelled run';
         onEvent('assistant-cancelled', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id });
@@ -589,7 +591,7 @@ class AssistantRun {
 
       // if the run is completed, we set the latest message to the last message in the thread
       else if (this.run.status === "completed") {
-        process.stdout.write(`\n✔`);
+        process.stdout.write(`🏁\r\n`);
         this.status = 'completed';
         this.run_steps = await listRunSteps(this.thread.id, this.run.id);
         const rs = this.run_steps.data[this.run_steps.data.length - 1].id;
@@ -602,8 +604,9 @@ class AssistantRun {
 
       // if the run is queued or in progress, we wait for the run to complete
       else if (this.run.status === "queued" || this.run.status === "in_progress") {
+       process.stdout.write('🏁');
         while (this.run.status === "queued" || this.run.status === "in_progress") {
-          process.stdout.write(`⏳`);
+          process.stdout.write('🛸');
           this.status = 'in-progress';
           this.run = await retrieveRun(this.thread.id, this.run.id);
           this.run_steps = await listRunSteps(this.thread.id, this.run.id);
@@ -613,20 +616,19 @@ class AssistantRun {
             onEvent('assistant-in-progress', { assistantId: this.assistant.id, threadId: this.thread.id, runId: this.run.id, runSteps: this.run_steps });
             // tool icon
             if (rs.type === 'tool_calls') {
-              process.stdout.write(`🔧`);
-            } else {
-              process.stdout.write(`⏳`);
-            }
+              process.stdout.write(`\b🔧`);
+            } 
           }
           if (await waitIfRateLimited(this.run)) return loop();
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
+        process.stdout.write('✅');
         return loop();
       }
 
       // if the run requires action, we execute the tools and submit the outputs
       else if (this.run.status === "requires_action") {
-        process.stdout.write(`❗`);
+        process.stdout.write(`🔧`);
         this.status = 'executing-tools';
         this.toolCalls = this.run.required_action.submit_tool_outputs.tool_calls;
         this.toolOutputs = await this.execTools(this.toolCalls, this.toolbox.tools, onEvent, this.state);

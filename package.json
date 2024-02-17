@@ -1,6 +1,6 @@
 {
   "name": "@nomyx/assistant-cli",
-  "version": "2.2.3",
+  "version": "2.2.7",
   "description": "A javascript-based assistant that can help you with your daily tasks",
   "main": "./index.js",
   "publisher": "Nomyx",
@@ -9,7 +9,9 @@
     "url": "git+https://github.com/nomyx-io/ai-assistant-cli.git"
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "start": "node ./index.js",
+    "test": "jest"
   },
   "keywords": [
     "AI",
@@ -22,10 +24,13 @@
     "axios": "^1.6.7",
     "cli-color": "^2.0.3",
     "cli-highlight": "^2.1.11",
+    "curly": "^0.6.2",
     "dependency-tree": "^10.0.9",
     "dotenv": "^16.4.2",
     "inquirer": "^6.0.0",
     "install": "^0.13.0",
+    "jest": "^29.7.0",
+    "node-libcurl": "^4.0.0",
     "npm": "^10.4.0",
     "ohm-js": "^17.1.0",
     "openai": "^4.27.0",

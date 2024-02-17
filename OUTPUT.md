@@ -1,1 +1,0 @@
-I'm generating chat responses through a combination of natural language processing algorithms and pre-defined logic structures. The responses are outputted as JSON objects without surrounding code blocks.
