@@ -1,0 +1,48 @@
+<div id="debug-container">
+    <pre id="debug-messages">{debugMessages.join('\n')}</pre>
+    <div id="debug-stats">
+      <div class="debug-column">
+        <div>{processingState}</div>
+        <div>{requirements}</div>
+      </div>
+      <div class="debug-column">
+        <div>{currentAction}</div>
+        <div>{percentComplete}</div>
+      </div>
+      <div class="debug-column">
+        <div>{nextTask}</div>
+        <div>{threadId}</div>
+      </div>
+    </div>
+  </div>
+  
+  <div>{pageData.body}</div>
+  
+  <main class="flex flex-col justify-between h-full">
+    <form class="text-sm bg-white absolute inset-x-0 bottom-0">
+      <div class="flex items-center px-3 py-2 bg-gray-50 dark:bg-gray-700">
+        
+        <button onclick={doFileSelected}>
+          <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 18">
+            <path fill="currentColor" d="M13 5.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0ZM7.565 7.423 4.5 14h11.518l-2.516-3.71L11 13 7.565 7.423Z" />
+            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 1H2a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1Z" />
+            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0ZM7.565 7.423 4.5 14h11.518l-2.516-3.71L11 13 7.565 7.423Z" />
+          </svg>
+        </button> 
+        <input type="checkbox" id="preprocess" name="preprocess" value="preprocess" checked={preprocess} onchange={onPreprocessClick} class="ml-5"/>
+        <textarea id="chat" rows="1" class="mx-4 p-2.5 w-full text-sm text-gray-900 bg-transparent rounded-lg border border-gray-300 focus:ring-blue-500 dark:border-gray-600" placeholder={placeholder} value={chatMessages} onkeyup={onTextAreaKeyUp}></textarea>
+        <div class="text-blue-600">20%</div>
+        <div style={{ backgroundColor: ledColor }} class="w-3 h-3 rounded-full ml-4 mr-4" onclick={threadIdClick}></div>
+        <button onclick={toggleMode} class="p-2 text-blue-600 rounded-full">
+          <svg class={`w-5 h-5 ${mode === 'compact'?'':'rotate-180'}`} xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 18 20">
+            <path d="m17.914 18.594-8-18a1 1 0 0 0-1.828 0l-8 18a1 1 0 0 0 1.157 1.376L8 18.281V9a1 1 0 0 1 2 0v9.281l6.758 1.689a1 1 0 0 0 1.156-1.376Z" />
+          </svg>
+        </button>
+        <button onclick={doChatButtonClick} class="p-2 text-blue-600 rounded-full">
+          <svg class="w-5 h-5 rotate-90" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 18 20">
+            <path d="m17.914 18.594-8-18a1 1 0 0 0-1.828 0l-8 18a1 1 0 0 0 1.157 1.376L8 18.281V9a1 1 0 0 1 2 0v9.281l6.758 1.689a1 1 0 0 0 1.156-1.376Z" />
+          </svg>
+        </button>
+      </div>
+    </form>
+  </main>

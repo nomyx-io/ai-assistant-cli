@@ -50,16 +50,9 @@ class ConfigurationManager {
         fs.writeFileSync(path.join(appDir, 'config.json'), JSON.stringify(config, null, 2));
     }
 
-    getConfig() {
-        return this._config;
-    }
-    setConfig(config) {
-        this._config = config;
-        this.saveConfig(config);
-    }
-    getConfigValue(key) {
-        return this._config[key];
-    }
+    getConfig() { return this._config; }
+    setConfig(config) { this._config = config; this.saveConfig(config); }
+    getConfigValue(key) { return this._config[key]; }
 }
 
 const configManager = ConfigurationManager.getInstance();

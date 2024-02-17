@@ -9,7 +9,6 @@
     "url": "git+https://github.com/nomyx-io/ai-assistant-cli.git"
   },
   "scripts": {
-    "build": "tsc",
     "start": "node ./index.js",
     "test": "jest"
   },
