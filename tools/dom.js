@@ -1,3 +1,30 @@
+const getDOMNodes = require('../utils.js').getDOMNodes;
+
+function summarizeHTMLElement(element, level = 0) {
+  let summary = { textSummary: '', imageCount: 0, linkCount: 0, interactiveCount: 0 };
+
+  if (level === 0) {
+      summary.textSummary = element.textContent.slice(0, 100) + '...'; // First 100 chars
+      summary.imageCount += element.querySelectorAll('img').length;
+      summary.linkCount += element.querySelectorAll('a').length;
+      summary.divCount += element.querySelectorAll('div').length;
+      summary.interactiveCount += element.querySelectorAll('input, button, select, textarea, video, audio', 'iframe').length;
+  } else {
+      // Summarize child elements
+      const children = element.children;
+      for (let i = 0; i < children.length; i++) {
+          let childSummary = summarizeHTMLElement(children[i], level - 1);
+          summary.textSummary += ' ' + childSummary.textSummary;
+          summary.imageCount += ' ' + childSummary.imageCount;
+          summary.linkCount += ' ' + childSummary.linkCount;
+          summary.interactiveCount += ' ' + childSummary.interactiveCount;
+      }
+      // Simplify the summary for this level
+      summary.textSummary = `${summary.textSummary.substring(0, 50)}... (${children.length} elements)`;
+  }
+  return summary;
+}
+
 const toolSchema = {
   state: {
     path: '',
@@ -9,7 +36,7 @@ const toolSchema = {
       type: 'function',
       function: {
         name: 'html_selector',
-        description: 'Performs the selector operation on the HTML page at the given path. The operation can be get, append, prepend, replace, remove, get_attributes, or set_attributes.',
+        description: 'Performs the selector operation on the HTML page at the given path. The operation can be get, append, prepend, replace, remove, get_attributes, or set_attributes, or summarize. IF running in the browser, the path is ignored and the current page is used.',
         parameters: {
           type: 'object',
           properties: {
@@ -19,19 +46,14 @@ const toolSchema = {
             value: { type: 'string', description: 'The HTML content to append.' },
             n: { type: 'string', description: 'For summarize, specifies the depth of child elements to summarize. 0 for detailed information.' },
           },
-          required: ['path', 'selector', 'operation']
+          required: ['selector', 'operation']
         }
       }
     }
   ],
   tools: {
     html_selector: function ({ path, operation, selector, value, n }) {
-      const fs = require('fs');
-      const { JSDOM } = require('jsdom');
-      const htmlContent = fs.readFileSync (path, 'utf8');
-      const dom = new JSDOM(htmlContent);
-      const document = dom.window.document;
-      const elements = document.querySelectorAll(selector);
+      const elements = getDOMNode(path, selector, true);
       let result = '';
       switch (operation) {
         case 'get':

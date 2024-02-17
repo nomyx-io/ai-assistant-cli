@@ -4,74 +4,11 @@ const path = require('path');
 const fetch = require('node-fetch');
 const debug = false;
 const { generateUsername } = require("unique-username-generator");
+const { configManager } = require('./config-manager');
 
-function isBrowser() {
-    return typeof window !== 'undefined';
-}
-
-// app install directory
-const requireMain = require.main || { filename: __filename };
-
-/**
- * Saves the configuration to a JSON file.
- */
-function saveConfig(config) {
-  const appDir = path.dirname(requireMain.filename);
-  fs.writeFileSync(path.join(appDir, 'config.json'), JSON.stringify(config));
-}
-
-class ConfigurationManager {
-  static _instance;
-    _config;
-
-    constructor() {
-    this._config = this.loadConfig();
-  }
-
-  get applicationFolder() {
-    let _appDir = path.dirname(requireMain.filename);
-    const appDirParts = _appDir.split(path.sep);
-    if (appDirParts[appDirParts.length - 1] === 'bin') {
-      appDirParts.pop();
-      _appDir = appDirParts.join(path.sep);
-    }
-    return _appDir;
-  }
-
-  static getInstance() {
-    if (!ConfigurationManager._instance) {
-      ConfigurationManager._instance = new ConfigurationManager();
-    }
-
-    return ConfigurationManager._instance;
-  }
-
-  loadConfig() {
-    const appDir = path.dirname(requireMain.filename);
-    if (fs.existsSync(path.join(appDir, 'config.json'))) {
-      return JSON.parse(fs.readFileSync(path.join(appDir, 'config.json'), 'utf8'));
-    } else {
-      return {
-        OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
-        PLAYHT_AUTHORIZATION: process.env.PLAYHT_AUTHORIZATION || '',
-        PLAYHT_USER_ID: process.env.PLAYHT_USER_ID || '',
-        PLAYHT_MALE_VOICE: process.env.PLAYHT_MALE_VOICE || '',
-        PLAYHT_FEMALE_VOICE: process.env.PLAYHT_FEMALE_VOICE || '',
-        GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || '',
-        GOOGLE_CX_ID: process.env.GOOGLE_CX_ID || '',
-        NEWS_API_KEY: process.env.NEWS_API_KEY || '',
-      };
-    }
-  }
-  
-  getConfig() {
-    return this._config;
-  }
-  setConfig(config) {
-    this._config = config;
-    saveConfig(config);
-  }
-}
+const isBrowser = () => typeof window !== 'undefined';
+const loadConfig = () => configManager.getConfig();
+const saveConfig = (config) => configManager.setConfig(config);
 
 class AssistantAPI {
     serverUrl;
@@ -157,8 +94,6 @@ class AssistantAPI {
         }
     }
     static async run(persona, assistant_id, thread_id, name, request, schemas, tools, state, model = 'gpt-4-turbo-preview', onEvent) {
-        const assistantAPI = new AssistantAPI();
-
         let assistant;
         if (assistant_id) assistant = await assistantAPI.callAPI('assistants', 'retrieve', { assistant_id: assistant_id });
         else assistant = await assistantAPI.callAPI('assistants', 'create', {
@@ -330,6 +265,8 @@ class AssistantAPI {
     }
 }
 
+const assistantAPI = new AssistantAPI();
+//assistantAPI.serverUrl = 'http://localhost:8654';
 
 const toolmakerToolbox = {
     prompt: `INSTRUCTIONS: generate an assistant tool in Javascript that will perform a set of given requirements.
@@ -406,7 +343,6 @@ const toolmakerToolbox = {
         { type: 'function', function: { name: 'finish_work', description: 'Finish the work session and save the completed generated tool to disk.', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The completed tool to save to disk' } }, required: ['value'] } } },
     ]
 }
-
 
 const developerToolbox = {
     prompt: `***MASTER PAIR PROGRAMMER***
@@ -541,137 +477,7 @@ RESPOND with a JSON object WITH NO SURROUNDING CODEBLOCKS with the following fie
 
 const name = generateUsername("", 2, 38);
 
-class Toolbox {
-    constructor(persona, tools, schemas, state) {
-        this.persona = persona;
-        this.tools = tools;
-        this.schemas = schemas;
-        this.state = state;
-    }
-    addTool(tool, schema, state) {
-        const toolName = tool.name;
-        this.tools[toolName] = tool;
-        this.schemas.push(schema);
-        this.state = { ...this.state, ...state };
-        this[toolName] = tool.bind(this);
-    }
-    getTool(tool) {
-        const schema = this.schemas.find((schema) => schema.function.name === tool);
-        return {
-            [tool]: this.tools[tool],
-            schema
-        }
-    }
-    setState(vv, value) {
-        this.state[vv] = value;
-    }
-    getState(vv) {
-        return this.state[vv];
-    }
-    static loadToolbox(appDir) {
-        const toolbox = new Toolbox(developerToolbox.prompt, developerToolbox.tools, developerToolbox.schemas, developerToolbox.state);
-        const toolsFolder = path.join(__dirname, 'tools')
-        const toolNames = [];
-        if (fs.existsSync(toolsFolder)) {
-            const files = fs.readdirSync(toolsFolder);
-            files.forEach((file) => {
-                const t = require(path.join(toolsFolder, file))
-                Object.keys(t.tools).forEach((key) => {
-                    const toolFunc = t.tools[key];
-                    const schema = t.schemas.find((schema) => schema.function.name === key);
-                    toolbox.addTool(toolFunc, schema, t.state);
-                    toolNames.push(key);
-                })
-            });
-            console.log('tools:', toolNames);
-        } else {
-            fs.mkdirSync(path.join(appDir, 'tools'));
-        }
-        return toolbox;
-    }
-}
 
-class AssistantRun {
-    constructor(assistant_id, thread_id, toolbox, request, model = 'gpt-4-turbo-preview') {
-        this.assistant_id = assistant_id;
-        this.thread_id = thread_id;
-        this.toolbox = toolbox;
-        this.state = {
-            percent_complete: 0,
-            status: 'idle',
-            iteration: 0,
-            requirements: request,
-        }
-        this.model = model;
-    }
-    async attachFile(file) {
-        const fileData = fs.readFileSync(file);
-        const result = await AssistantAPI.callAPI('assistants', 'upload_file', { assistant_id: this.assistant_id, body: { file: fileData } });
-        return result;
-    }
-    async detachFile(fileId) {
-        const result = await AssistantAPI.callAPI('assistants', 'delete_file', { assistant_id: this.assistant_id, fileId });
-        return result;
-    }
-    async listFiles() {
-        const result = await AssistantAPI.callAPI('assistants', 'list_files', { assistant_id: this.assistant_id });
-        return result;
-    }
-    async run() {
-        let result = await AssistantAPI.run(this.toolbox.persona, this.assistant_id, this.thread_id, name, JSON.stringify(this.state), this.toolbox.schemas, this.toolbox.tools, this, 'gpt-4-turbo-preview', (event, data) => {
-            process.stdout.write('🛸');
-            if (event === 'assistant-created') this.assistant_id = data.assistant_id;
-            if (event === 'thread-created') this.thread_id = data.thread_id;
-            if (event === 'message-received') console.log(data.message);
-            if (event === 'run-queued') process.stdout.write('🛸');
-            if (event === 'exec-tool') {
-                data.toolOutputs.forEach((output, i) => {
-                    const toolOutput = data.toolOutputs.find((_output) => _output.tool_call_id === output.tool_call_id);
-                    const func = data.toolCalls.find((call) => call.id === toolOutput.tool_call_id).function.name;
-                    const args = data.toolCalls.find((call) => call.id === toolOutput.tool_call_id).function.arguments
-                    console.log(`🛠️ Executed tool: ${func} ${args}`);
-                    console.table({
-                        function: func,
-                        arguments: data.toolCalls.find((call) => call.id === toolOutput.tool_call_id).function.arguments,
-                        output: toolOutput.output.slice(0, 200) + (toolOutput.output.length > 200 ? '...' : '')
-                    });
-                })
-            }
-            if (event === 'run-completed') { 
-                console.log(`🏁`); 
-            }
-
-        })
-        result = JSON.parse(result);
-        console.log('result', result);
-        this.state = { ...this.state, ...result.state };
-
-        return this.state;
-    }
-}
-
-class AssistantRunner {
-    runs = [];
-    constructor(model = 'gpt-4-turbo-preview') {
-        this.toolbox = Toolbox.loadToolbox(require('path').join(__dirname, '.'));
-        this.model = model;
-        this.run = this.run.bind(this);
-    }
-    async run(request) {
-        let state = {
-            requirements: request,
-            percent_complete: 0,
-            status: 'idle',
-            iteration: 0,
-        }
-        const configMgr = ConfigurationManager.getInstance();
-        const config = configMgr.getConfig();
-        const run = new AssistantRun(config.assistant_id, config.thread_id, this.toolbox, request);
-        const result = await run.run();
-        this.runs.push(run);
-        return result;
-    }
-}
 
 const runner = new AssistantRunner();
 
@@ -692,12 +498,21 @@ async function cleanupOld() {
 
 // set up a readline interface
 const readline = require('readline');
-const { get } = require('http');
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     prompt: '> '
-});
+}).on('close', async () => {
+    process.stdout.write(`\r\n`);
+    if (AssistantRunner.current_run && AssistantRunner.current_run.state.status !== 'complete') {
+        await assistantAPI.callAPI('runs', ['cancel'], { thread_id: AssistantRunner.current_run.thread_id, run_id: AssistantRunner.current_run.run_id });
+        console.log('run cancelled');
+    }
+    else {
+        console.log('goodbye');
+        process.exit(0);
+    }
+  });
 
 // prompt the user for input
 rl.prompt();
