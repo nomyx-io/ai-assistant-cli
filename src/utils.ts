@@ -1,11 +1,14 @@
-function getDOMNodes(domFile, selector, unsafe = false) {
+export function getDOMNodes(domFile: string, selector: string, unsafe = false) {
     const isBrowser = typeof window !== 'undefined';
     if (isBrowser) {
-        let ret = document.querySelector('#content-container').querySelector(selector);
-        if (!ret && unsafe) {
-            return  document.querySelectorAll(selector);
-        } else if (!ret && !unsafe) {
-            throw new Error('Selector not found');
+        const qs = document.querySelector('#content-container');
+        if(qs) {
+            let ret = qs.querySelector(selector);
+            if (!ret && unsafe) {
+                return  document.querySelectorAll(selector);
+            } else if (!ret && !unsafe) {
+                throw new Error('Selector not found');
+            }
         }
     } else {
         const fs = require('fs');

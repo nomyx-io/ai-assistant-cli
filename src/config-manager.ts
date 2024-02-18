@@ -1,15 +1,21 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
-class ConfigurationManager {
-    static _instance;
-    _config;
+const requireMain = require.main || { filename: __filename };
+
+interface Config {
+    [key: string]: any;
+}
+
+export class ConfigurationManager {
+    static _instance: ConfigurationManager;
+    _config: { [x: string]: any; };
 
     constructor() {
         this._config = this.loadConfig();
     }
 
-    get applicationFolder() {
+    get applicationFolder(): string {
         let _appDir = path.dirname(requireMain.filename);
         const appDirParts = _appDir.split(path.sep);
         if (appDirParts[appDirParts.length - 1] === 'bin') {
@@ -19,7 +25,7 @@ class ConfigurationManager {
         return _appDir;
     }
 
-    static getInstance() {
+    static getInstance(): ConfigurationManager {
         if (!ConfigurationManager._instance) {
             ConfigurationManager._instance = new ConfigurationManager();
         }
@@ -27,8 +33,8 @@ class ConfigurationManager {
         return ConfigurationManager._instance;
     }
 
-    loadConfig() {
-        const appDir = path.dirname(require.main.filename);
+    loadConfig(): Config {
+        const appDir = path.dirname(requireMain.filename);
         if (fs.existsSync(path.join(appDir, 'config.json'))) {
             return JSON.parse(fs.readFileSync(path.join(appDir, 'config.json'), 'utf8'));
         } else {
@@ -45,18 +51,19 @@ class ConfigurationManager {
         }
     }
 
-    saveConfig(config) {
-        const appDir = path.dirname(require.main.filename);
+    saveConfig(config: Config) {
+        const appDir = path.dirname(requireMain.filename);
         fs.writeFileSync(path.join(appDir, 'config.json'), JSON.stringify(config, null, 2));
     }
 
-    getConfig() { return this._config; }
-    setConfig(config) { this._config = config; this.saveConfig(config); }
-    getConfigValue(key) { return this._config[key]; }
+    getConfig(): Config { return this._config; }
+    setConfig(config: Config) { this._config = config; this.saveConfig(config); }
+    getConfigValue(key: string | number): any { return this._config[key]; }
 }
 
-const configManager = ConfigurationManager.getInstance();
+export const configManager = ConfigurationManager.getInstance();
 
-module.exports = { 
-     configManager
+module.exports = {
+    configManager,
+    ConfigurationManager: ConfigurationManager,
 }

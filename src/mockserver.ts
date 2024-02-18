@@ -5,14 +5,16 @@ const Gun = require('gun');
 const { configManager } = require('./config-manager');
 const config = configManager.getConfig();
 
-function getRequestKey(req) {
+const gun = Gun({ file: 'data.json' }).get('requests');
+
+function getRequestKey(req: any) {
   const path = req.path;
   const method = req.method;
   const bodyHash = Gun.text.hash(JSON.stringify(req.body));
   return `${method}:${path}:${bodyHash}`;
 }
 
-function createServer(port, middlewares) {
+function createServer(port: any, middlewares: any) {
   const app = express();
   app.use(express.json());
   app.use(middlewares);
@@ -24,7 +26,7 @@ function createServer(port, middlewares) {
   return app;
 }
 
-function apiKeyAuth (req, res, next) {
+function apiKeyAuth (req: any, res: any, next: any) {
   const apiKey = req.headers.authorization;
   if (!apiKey || apiKey !== 'Bearer ' + config.OPENAI_API_KEY) {
     return res.status(401).json({ message: "Unauthorized" });
@@ -32,16 +34,16 @@ function apiKeyAuth (req, res, next) {
   next();
 }
 
-function dynamicResponses(req, res, next) {
+function dynamicResponses(req: any, res: any, next: any) {
   const requestKey = getRequestKey(req);
-  gun.get(requestKey).once((data) => {
+  gun.get(requestKey).once((data: any) => {
     if (data) {
       console.log('Serving recorded response for:', requestKey);
       res.json(data.response);
     } else {
       // Record response
       let originalSend = res.send;
-      res.send = function(body) {
+      res.send = function(body: any) {
         console.log('Recording response for:', requestKey);
         gun.get(requestKey).put({response: JSON.parse(body)});
         originalSend.call(this, body);
@@ -55,12 +57,12 @@ const gunServer = createServer(config.MOCKSERVER_PORT || 8765, Gun.serve);
 
 const forwardingServer = createServer(config.MOCKSERVER_PORT || 8764, [apiKeyAuth, dynamicResponses]);
 
-forwardingServer.get('/_/dataset', (req, res) => {
+forwardingServer.get('/_/dataset', (req: any, res: any) => {
   const collectDataset = () => {
     return new Promise((resolve, reject) => {
-      let dataset = [];
+      let dataset: any = [];
       let entryCount = 0;
-      gun.get('requests').map().once((data, key) => {
+      gun.get('requests').map().once((data: any, key: any) => {
         if (data) {
           // Transform data into a suitable format for training
           let entry = {
@@ -82,6 +84,6 @@ forwardingServer.get('/_/dataset', (req, res) => {
   .catch((_) => res.status(500).json({error: "An error occurred while collecting the dataset."}));
 });
 
-forwardingServer.all('*', (req, res) => {
+forwardingServer.all('*', (req: any, res: any) => {
   res.json({ message: `Mock response for ${req.method} ${req.path}` });
 });

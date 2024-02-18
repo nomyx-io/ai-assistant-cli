@@ -1,8 +1,7 @@
-const fetch = require('node-fetch');
+const path = require('path');
 const { HuggingFaceApi } = require('huggingface');
 
 const ConfigurationManager = require('openai').ConfigurationManager;
-const configManager = ConfigurationManager.getInstance();
 
 // Configuration: Set your mock server URL and Hugging Face API key
 const mockServerUrl = configManager.MOCKSERVER_URL || 'http://localhost:8654/_/dataset';
@@ -26,10 +25,10 @@ async function requestDataset() {
 }
 
 // Function to upload dataset to Hugging Face
-async function uploadDataset(dataset) {
+async function uploadDataset(dataset: any[]) {
     // Define your dataset repository name and organization (or username)
     const datasetRepo = datasetBaseName; // Replace with your dataset repository name
-    const organization = organization; // Replace with your organization or username
+    const organization = 'lonestar108'; // Replace with your organization or username
     const filePath = path.join(outputDir, `${datasetRepo}.json`);
     const datasetFileContent = JSON.stringify(dataset);
     try {

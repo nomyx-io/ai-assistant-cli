@@ -1,3 +1,4 @@
+const AssistantAPI = require('@nomyx/assistant');
 module.exports = {
     prompt: `INSTRUCTIONS: generate an assistant tool in Javascript that will perform a set of given requirements.
   
@@ -47,29 +48,34 @@ module.exports = {
   
   *** YOU ARE NON-CONVERSATIONAL. PRIMARY OUTPUT IS NOT MONITORED ***
     `,
-    state: {
-        temp_work: '',
-        complete: false
-    },
+    state: {},
     tools: {
-        start_work: function (_, run) { run.state.temp_work = '// work started'; run.state.complete = false; console.log('Work on tool started.'); return 'started' },
-        is_work_started: function (_, run) { return run.state.temp_work ? run.state.temp_work : 'no' },
-        save_temp_work: function ({ value }, run) { run.state.temp_work = value; console.log('Saving temp work.'); return run.state.temp_work },
-        finish_work: function ({ value }, run) {
-            const codeHash = require('crypto').createHash('md5').update(value).digest('hex');
-            const toolPath = path.join(process.cwd(), 'tools', `${codeHash}.js`);
-            fs.writeFileSync(toolPath, value);
-            console.log(`Tool saved to ${toolPath}`);
-            run.state.temp_work = '';
-            run.state.complete = true;
-            run.state.tool_path = toolPath;
-            return `Tool saved to ${toolPath}`
+        generate_tool: async function ({ requirements }, state) {
+            const prompt = module.exports.prompt;
+            const runResults = async (requirements) => {
+                // AssistantAPI.run(
+                //     prompt, run.toolmaker_id, 
+                //     run.toolmaker_thread_id, 
+                //     'Toolmaker', 
+                //     requirements, 
+                //     toolmakerToolbox.tools, 
+                //     toolmakerToolbox.schemas, 
+                //     run, 
+                //     (event, data) => {
+                //         console.log(event, data);
+                //         if (event === 'assistant-created') run.toolmaker_id = data.assistant_id;
+                //         if (event === 'thread-created') run.toolmaker_thread_id = data.thread_id;
+                //     });
+                // if (run.state.is_finished) {
+                //     return runResults;
+                // } else {
+                //     return await runResults(requirements);
+                // }
+            }
+            return await runResults(requirements);
         },
     },
     schemas: [
-        { type: 'function', function: { name: 'start_work', description: 'Start the work session' } },
-        { type: 'function', function: { name: 'is_work_started', description: 'Check if the work session has started. It will either return a \'no\' or the work performed so far.' } },
-        { type: 'function', function: { name: 'save_temp_work', description: 'Save the work performed on the tool so far, if its not complete', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The temp work to save' } }, required: ['value'] } } },
-        { type: 'function', function: { name: 'finish_work', description: 'Finish the work session and save the completed generated tool to disk.', parameters: { type: 'object', properties: { value: { type: 'string', description: 'The completed tool to save to disk' } }, required: ['value'] } } },
-    ]
-}
+        { type: 'function', function: { name: 'generate_tool', description: 'Generate an assistant tool that will fulfill the given requirements. ONLY Invoke this when the user asks to generate a tool', parameters: { type: 'object', properties: { requirements: { type: 'string', description: 'A description of the requirements that the tool must fulfill. Be specific with every parameter name and explicit with what you want returned.' } }, required: ['message'] } } },
+    ],
+};

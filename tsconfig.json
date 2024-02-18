@@ -3,13 +3,15 @@
         "module": "commonjs",
         "target": "es5",
         "moduleResolution": "node",
+        "outDir": "dist",
         "strict": true,
         "esModuleInterop": true,
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true,
         "sourceMap": true,
         "resolveJsonModule": true,
+        "typeRoots": ["./node_modules/@types", "./types"]
     },
-    "include": ["index-old.ts"],
+    "include": ["src","types/custom.d.ts"],
     "exclude": ["node_modules"]
 }
